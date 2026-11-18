@@ -23,6 +23,14 @@ response is outstanding or while the loader lock is held.
 Sessions are not stored in SQLite. Startup does not adopt an unknown pid.
 A process generation is never reused. The public request path rejects tool
 and resource methods before any byte is written.
+
+Lifecycle ownership: every launched child stays reachable until confirmed
+reaped. Ready sessions live in `_sessions`. Sessions whose children are not
+yet reaped live in `_stopping` after they leave `_sessions`. Failed startups
+that launched a child use the same `_stopping` path via `_abandon`. At most
+one cleanup owner runs per session (`_closing`); retries are bounded and
+cannot overlap. `open_session` never launches a second child for a server
+identity while that identity remains in `_stopping`.
 """
 
 from __future__ import annotations
@@ -82,12 +90,38 @@ MAX_TOMBSTONES = 64
 
 _registry = threading.Lock()
 _sessions: dict[str, "McpSession"] = {}
+_stopping: dict[str, "McpSession"] = {}
 _inflight: dict[str, "_Reservation"] = {}
 _generations: dict[str, int] = {}
 _accepting = True
 _spawn_override = None
 _monotonic = time.monotonic
 _sleep = time.sleep
+
+
+def _tracked_server_ids_locked() -> set[str]:
+    """Server identities that hold a process slot. Caller holds `_registry`."""
+    return set(_sessions) | set(_inflight) | set(_stopping)
+
+
+def _child_reaped(session: "McpSession") -> bool:
+    child = session.child
+    return child is None or bool(getattr(child, "reaped", False))
+
+
+def _publish_lifecycle_locked(session: "McpSession", *, terminated: bool) -> None:
+    """Move session between registries. Caller holds `_registry`.
+
+    Ready publication uses `_sessions` only. An unreaped child is always
+    retained in `_stopping` so shutdown and open_session cannot lose it.
+    """
+    if _sessions.get(session.server_id) is session:
+        _sessions.pop(session.server_id, None)
+    if terminated or _child_reaped(session):
+        if _stopping.get(session.server_id) is session:
+            _stopping.pop(session.server_id, None)
+    else:
+        _stopping[session.server_id] = session
 
 
 class SessionError(Exception):
@@ -262,32 +296,46 @@ def open_session(server_id: str) -> McpSession:
             raise SessionError("disabled")
         waiter = None
         stale = None
+        stopping_target = None
         owner = False
         reservation: _Reservation | None = None
         generation = 0
         with _registry:
             if not _accepting:
                 raise SessionError("shutting_down")
-            existing = _sessions.get(server_id)
-            if existing is not None and existing.state == "ready":
-                if existing.epoch == snapshot.epoch and existing.revision == snapshot.revision:
-                    return existing
-                stale = existing
-            elif existing is not None and existing.state != "dead":
-                waiter = existing.close_done
-            if stale is None and waiter is None:
-                current = _inflight.get(server_id)
-                if current is not None:
-                    reservation = current
-                elif len(set(_sessions) | set(_inflight)) >= _timing.max_processes:
+            # An unreaped prior child blocks a new generation for this identity.
+            stopping = _stopping.get(server_id)
+            if stopping is not None:
+                stopping_target = stopping
+            else:
+                existing = _sessions.get(server_id)
+                if existing is not None and existing.state == "ready":
+                    if existing.epoch == snapshot.epoch and existing.revision == snapshot.revision:
+                        return existing
+                    stale = existing
+                elif existing is not None and existing.state != "dead":
+                    waiter = existing.close_done
+                if stale is None and waiter is None:
+                    current = _inflight.get(server_id)
+                    if current is not None:
+                        reservation = current
+                    elif len(_tracked_server_ids_locked()) >= _timing.max_processes:
+                        raise SessionError("busy")
+                    else:
+                        reservation = _Reservation()
+                        _inflight[server_id] = reservation
+                        _generations[server_id] = _generations.get(server_id, 0) + 1
+                        generation = _generations[server_id]
+                        reservation.generation = generation
+                        owner = True
+        if stopping_target is not None:
+            # Bounded cleanup (or wait for the current cleanup owner), then refuse
+            # a new spawn if the prior child is still unreaped.
+            close_session(stopping_target)
+            with _registry:
+                if _stopping.get(server_id) is not None:
                     raise SessionError("busy")
-                else:
-                    reservation = _Reservation()
-                    _inflight[server_id] = reservation
-                    _generations[server_id] = _generations.get(server_id, 0) + 1
-                    generation = _generations[server_id]
-                    reservation.generation = generation
-                    owner = True
+            continue
         if stale is not None:
             close_session(stale)
             continue
@@ -360,6 +408,13 @@ def request(
 
 
 def close_session(session: McpSession) -> None:
+    """Stop one session. One cleanup owner at a time; unreaped children stay tracked.
+
+    Ownership: the thread that sets `_closing` runs one bounded shutdown attempt.
+    Concurrent callers wait on `close_done`. After an unsuccessful attempt the
+    session remains in `_stopping` with `_closing` cleared so a later call may
+    retry. Retry exhaustion never drops an unreaped child from the registry.
+    """
     retry = False
     with session.lock:
         if session.state == "dead":
@@ -373,7 +428,8 @@ def close_session(session: McpSession) -> None:
             and not getattr(session.child, "reaped", False)
         ):
             # Prior shutdown could not confirm termination. Allow one bounded retry
-            # without re-entering reader teardown or double-clearing the registry.
+            # without re-entering reader teardown. Registry ownership stays in
+            # `_stopping` until reap is confirmed.
             session._closing = True
             session.close_done = threading.Event()
             owner = True
@@ -394,7 +450,13 @@ def close_session(session: McpSession) -> None:
             reader = session.reader
             if reader is not None and reader is not threading.current_thread() and reader.is_alive():
                 reader.join(timeout=1 + _timing.stdin_grace + _timing.term_grace)
-        terminated = _shutdown_child(session)
+        try:
+            terminated = _shutdown_child(session)
+        except Exception:
+            # Unexpected waitpid/signal failures must not skip registry publish or
+            # replace a deterministic busy/lifecycle outcome for open_session.
+            logger.warning("The MCP session shutdown failed.")
+            terminated = False
         if not retry:
             with session.send_lock:
                 for request_id, pending in list(session.pending.items()):
@@ -402,10 +464,11 @@ def close_session(session: McpSession) -> None:
                     pending.error = "closed"
                     pending.event.set()
                 session.pending.clear()
-            with _registry:
-                if _sessions.get(session.server_id) is session:
-                    _sessions.pop(session.server_id, None)
     finally:
+        if terminated and session.child is not None and not _child_reaped(session):
+            terminated = False
+        with _registry:
+            _publish_lifecycle_locked(session, terminated=terminated)
         with session.lock:
             session._closed = True
             # Only "dead" means termination was confirmed. Unconfirmed stops stay
@@ -421,7 +484,12 @@ def close_session(session: McpSession) -> None:
 
 
 def shutdown_all() -> None:
-    """Refuse new sessions and reap every session this process started."""
+    """Refuse new sessions and reap every tracked child this process started.
+
+    Snapshots `_sessions` and `_stopping` under the registry lock, then runs
+    bounded close attempts. Unreaped children remain in `_stopping` and are
+    reported explicitly; shutdown never claims they were cleaned up.
+    """
     global _accepting
     with _registry:
         _accepting = False
@@ -430,19 +498,45 @@ def shutdown_all() -> None:
         reservation.event.wait(
             timeout=_timing.initialize_seconds + (2 * (_timing.stdin_grace + _timing.term_grace)) + 5
         )
+    pending: list[McpSession] = []
+    seen: set[int] = set()
     with _registry:
-        sessions = list(_sessions.values())
-    for session in sessions:
+        for session in list(_sessions.values()) + list(_stopping.values()):
+            identity = id(session)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            pending.append(session)
+    for session in pending:
         try:
             close_session(session)
         except Exception:
             logger.warning("The MCP session shutdown failed.")
+    # Close may have moved sessions into `_stopping` after the first snapshot.
+    with _registry:
+        remaining = list(_stopping.values())
+    for session in remaining:
+        try:
+            close_session(session)
+        except Exception:
+            logger.warning("The MCP session shutdown failed.")
+    with _registry:
+        unresolved = list(_stopping.values())
+    for session in unresolved:
+        logger.warning(
+            "MCP unreaped child remains after shutdown_all server_id=%s generation=%s state=%s",
+            session.server_id,
+            session.generation,
+            session.state,
+        )
 
 
 def allow_sessions() -> None:
     global _accepting
     with _registry:
         _accepting = True
+        # Tests may re-enable acceptance after shutdown; do not clear `_stopping`.
+        # Unreaped children must stay visible until confirmed reaped.
 
 
 def enforce_idle(session: McpSession, now: float | None = None) -> bool:
@@ -626,8 +720,22 @@ def wait_mcp(session: McpSession, pending: _Pending, *, seconds: float) -> str:
 
 
 def retire_older_epochs(epoch: int) -> None:
+    """Close ready and stopping sessions from prior epochs.
+
+    Stopping sessions are included so unreaped children from retired epochs
+    remain under lifecycle ownership and receive another bounded cleanup.
+    """
+    victims: list[McpSession] = []
+    seen: set[int] = set()
     with _registry:
-        victims = [session for session in _sessions.values() if session.epoch < epoch]
+        for session in list(_sessions.values()) + list(_stopping.values()):
+            if session.epoch >= epoch:
+                continue
+            identity = id(session)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            victims.append(session)
     for session in victims:
         close_session(session)
     callback = _after_epoch
@@ -1063,17 +1171,38 @@ def _wait_grace(seconds: float, alive) -> None:
 
 
 def _abandon(session: McpSession) -> None:
+    """Shut down a failed startup that never joined `_sessions`.
+
+    Uses the same `_stopping` ownership as `close_session`: an unreaped child
+    stays tracked for process accounting, open_session blocking, and shutdown.
+
+    Registry publication always runs in `finally`, even when `_shutdown_child`
+    raises (for example InterruptedError from waitpid during grace). Shutdown
+    exceptions are logged and swallowed so `_bring_up` can still raise the
+    original startup failure after ownership is retained.
+    """
     with session.lock:
         session.state = "stopping"
         session._closing = True
-    terminated = _shutdown_child(session)
-    with session.lock:
-        session._closed = True
-        session.state = "dead" if terminated else "stopping"
-        session._closing = False
-    _close_pipe(session, "wake_r")
-    _close_pipe(session, "wake_w")
-    session.close_done.set()
+    terminated = False
+    try:
+        terminated = _shutdown_child(session)
+    except Exception:
+        logger.warning("The MCP session shutdown failed.")
+        terminated = False
+    finally:
+        # Never claim dead/reaped unless the child is absent or confirmed reaped.
+        if terminated and session.child is not None and not _child_reaped(session):
+            terminated = False
+        with _registry:
+            _publish_lifecycle_locked(session, terminated=terminated)
+        with session.lock:
+            session._closed = True
+            session.state = "dead" if terminated else "stopping"
+            session._closing = False
+        _close_pipe(session, "wake_r")
+        _close_pipe(session, "wake_w")
+        session.close_done.set()
 
 
 def _wake(session: McpSession) -> None:

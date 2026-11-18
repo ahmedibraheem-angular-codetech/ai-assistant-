@@ -7,6 +7,7 @@ import threading
 import pytest
 
 from app.mcp import gateway, loader
+from app.mcp import session as mcp_session
 from app.mcp.loader import mcp_status, reload_configuration, set_permit_hook
 from app.mcp.protocol import encode_message
 from app.mcp.session import (
@@ -44,12 +45,20 @@ def runtime(monkeypatch):
     monkeypatch.setattr(os, "fork", refuse)
     shutdown_all()
     allow_sessions()
+    mcp_session._generations.clear()
+    mcp_session._stopping.clear()
+    mcp_session._sessions.clear()
+    mcp_session._inflight.clear()
     set_spawn_override(None)
     set_permit_hook(None)
     set_test_timing(stdin_grace=0, term_grace=0, list_seconds=2, call_seconds=2, write_seconds=0.3)
     yield
     shutdown_all()
     allow_sessions()
+    mcp_session._generations.clear()
+    mcp_session._stopping.clear()
+    mcp_session._sessions.clear()
+    mcp_session._inflight.clear()
     set_spawn_override(None)
     set_permit_hook(None)
     reset_test_timing()
