@@ -1,0 +1,24 @@
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.config import get_settings
+from app.core.database import init_database, reset_database
+from app.main import app
+
+
+@pytest.fixture
+def database_file(tmp_path, monkeypatch):
+    path = tmp_path / "agents.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
+    get_settings.cache_clear()
+    reset_database()
+    yield path
+    reset_database()
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def client(database_file):
+    init_database()
+    with TestClient(app) as test_client:
+        yield test_client

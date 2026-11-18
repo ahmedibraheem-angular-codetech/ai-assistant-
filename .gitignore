@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.egg-info/
+data/
+*.key
+tests/_wp02_bin/
