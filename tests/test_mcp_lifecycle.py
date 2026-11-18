@@ -28,6 +28,7 @@ from app.mcp.session import (
     set_test_timing,
     shutdown_all,
 )
+from tests.mcp_trust import TRUSTED_ALT_EXECUTABLE, TRUSTED_EXECUTABLE
 from tests.test_mcp_session import FakeChild, _THREADS, _document, _open, _write_config
 
 
@@ -243,7 +244,7 @@ def test_failed_startup_with_unreaped_child_remains_tracked(published):
         child = FakeChild(facts, generation)
         holder.append(child)
         _deny_reap(child)
-        _write_config(database, json.dumps(_document(executable="/bin/echo")).encode())
+        _write_config(database, json.dumps(_document(executable=TRUSTED_ALT_EXECUTABLE)).encode())
         assert reload_configuration().published is True
         return child
 
@@ -431,7 +432,7 @@ def test_permanently_unresolved_survives_shutdown_without_false_cleanup(publishe
 def _session_with_child(published, *, generation: int = 1) -> tuple[mcp_session.McpSession, FakeChild]:
     """Build an unpublished startup session that still owns a launched child."""
     del published
-    facts = assess_executable("/bin/ls")
+    facts = assess_executable(TRUSTED_EXECUTABLE)
     child = FakeChild(facts, generation)
     session = mcp_session.McpSession("notes", "a" * 64, 1, generation, "b" * 64)
     session.child = child
@@ -581,7 +582,7 @@ def test_bring_up_preserves_startup_error_when_abandon_shutdown_raises(published
     def launch(server, facts, generation: int) -> FakeChild:
         child = FakeChild(facts, generation)
         holder.append(child)
-        _write_config(database, json.dumps(_document(executable="/bin/echo")).encode())
+        _write_config(database, json.dumps(_document(executable=TRUSTED_ALT_EXECUTABLE)).encode())
         assert reload_configuration().published is True
         return child
 

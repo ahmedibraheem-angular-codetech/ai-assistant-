@@ -66,6 +66,7 @@ from app.mcp.session import (
 )
 from app.tools.registry import get_tool_registry
 from app.tools.worker import ALLOWED_TOOLS
+from tests.mcp_trust import TRUSTED_ALT_EXECUTABLE, TRUSTED_EXECUTABLE, TRUSTED_ROOT
 
 _SECRET = "super-secret-value"
 _THREADS: list[threading.Thread] = []
@@ -248,16 +249,17 @@ def published(database_file):
     return database_file, raw
 
 
-def _document(executable: str = "/bin/ls", servers: list[str] | None = None, env: dict | None = None) -> dict:
+def _document(executable: str | None = None, servers: list[str] | None = None, env: dict | None = None) -> dict:
     names = servers or ["notes"]
+    path = TRUSTED_EXECUTABLE if executable is None else executable
     return {
-        "executable_roots": ["/bin"],
+        "executable_roots": [TRUSTED_ROOT],
         "servers": [
             {
                 "id": name,
                 "display_name": "Local notes",
                 "enabled": True,
-                "executable": executable,
+                "executable": path,
                 "args": [],
                 "env": {} if env is None else env,
                 "agent_ids": [],
@@ -335,7 +337,7 @@ def test_initialization_and_ping(published):
     assert session.state == "ready"
     assert session.generation == 1
     assert session.discovery == 1
-    assert session.executable_sha256 == hashlib.sha256(open("/bin/ls", "rb").read()).hexdigest()
+    assert session.executable_sha256 == hashlib.sha256(open(TRUSTED_EXECUTABLE, "rb").read()).hexdigest()
 
 
 def test_rejected_protocol_version_reaps_the_child(published):
@@ -747,7 +749,7 @@ def test_epoch_reload_closes_only_a_new_epoch(published):
     _write_config(database, b"{")
     assert reload_configuration().reason == "invalid"
     assert session.state == "ready"
-    _write_config(database, json.dumps(_document(executable="/bin/echo")).encode())
+    _write_config(database, json.dumps(_document(executable=TRUSTED_ALT_EXECUTABLE)).encode())
     assert reload_configuration().reason == "ok"
     assert session.state == "dead"
     assert child.reaped is True
@@ -781,7 +783,7 @@ def test_reload_during_startup_kills_the_unregistered_child(published):
     def launch(server, facts, generation: int) -> FakeChild:
         child = FakeChild(facts, generation)
         holder.append(child)
-        _write_config(database, json.dumps(_document(executable="/bin/echo")).encode())
+        _write_config(database, json.dumps(_document(executable=TRUSTED_ALT_EXECUTABLE)).encode())
         assert reload_configuration().published is True
         return child
 
@@ -809,11 +811,11 @@ def test_old_generation_cannot_affect_the_new_session(published):
 def test_environment_descriptor_and_linux_fail_closed(monkeypatch, caplog):
     caplog.set_level(logging.WARNING)
     server_env = (("TOKEN", _SECRET),)
-    plan_server = assess_executable("/bin/ls")
+    plan_server = assess_executable(TRUSTED_EXECUTABLE)
     from app.mcp.loader import current_snapshot as snapshot_reader
 
     class Dummy:
-        executable = "/bin/ls"
+        executable = TRUSTED_EXECUTABLE
         args = ()
         env = server_env
 
@@ -826,8 +828,8 @@ def test_environment_descriptor_and_linux_fail_closed(monkeypatch, caplog):
     digest = environment_sha256(server_env)
     assert _SECRET not in digest
     facts = plan_server
-    assert facts.sha256 == hashlib.sha256(open("/bin/ls", "rb").read()).hexdigest()
-    info = os.stat("/bin/ls")
+    assert facts.sha256 == hashlib.sha256(open(TRUSTED_EXECUTABLE, "rb").read()).hexdigest()
+    info = os.stat(TRUSTED_EXECUTABLE)
     assert (facts.device, facts.inode) == (info.st_dev, info.st_ino)
     with pytest.raises(ProcessError):
         assess_executable("/etc")
@@ -843,7 +845,7 @@ def test_environment_descriptor_and_linux_fail_closed(monkeypatch, caplog):
         assert "same service user can still replace" in spawn_identity()
     monkeypatch.setattr("app.mcp.process.execveat_syscall_number", lambda: None)
     monkeypatch.setattr("app.mcp.process._posix_spawn", lambda *_args: (_ for _ in ()).throw(AssertionError("posix_spawn")))
-    descriptor = os.open("/bin/ls", os.O_RDONLY)
+    descriptor = os.open(TRUSTED_EXECUTABLE, os.O_RDONLY)
     try:
         with pytest.raises(ProcessError) as caught:
             start_process(Dummy(), facts, generation=1, descriptor=descriptor, platform="linux")  # type: ignore[arg-type]
@@ -888,7 +890,7 @@ def test_listener_error_does_not_change_a_committed_reload(published, caplog):
         raise RuntimeError(_SECRET)
 
     set_epoch_listener(explode)
-    _write_config(database, json.dumps(_document(executable="/bin/echo")).encode())
+    _write_config(database, json.dumps(_document(executable=TRUSTED_ALT_EXECUTABLE)).encode())
     result = reload_configuration()
     assert result.published is True
     assert result.reason == "ok"

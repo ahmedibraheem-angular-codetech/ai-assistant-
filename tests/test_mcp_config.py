@@ -24,6 +24,7 @@ from app.mcp.loader import (
 from app.tools.registry import get_tool_registry
 from app.tools.worker import ALLOWED_TOOLS
 from tests.db_support import open_sqlite
+from tests.mcp_trust import TRUSTED_ALT_EXECUTABLE, TRUSTED_EXECUTABLE, TRUSTED_ROOT
 
 
 _SECRET = "super-secret-value"
@@ -39,12 +40,13 @@ def mcp_db(database_file):
     loader._snapshot = None
 
 
-def _document(env=None, executable="/bin/ls", roots=None, extra=None) -> dict:
+def _document(env=None, executable=None, roots=None, extra=None) -> dict:
+    path = TRUSTED_EXECUTABLE if executable is None else executable
     server = {
         "id": "notes",
         "display_name": "Local notes",
         "enabled": False,
-        "executable": executable,
+        "executable": path,
         "args": [],
         "env": {} if env is None else env,
         "agent_ids": [],
@@ -52,7 +54,7 @@ def _document(env=None, executable="/bin/ls", roots=None, extra=None) -> dict:
     }
     if extra:
         server.update(extra)
-    return {"executable_roots": ["/bin"] if roots is None else roots, "servers": [server]}
+    return {"executable_roots": [TRUSTED_ROOT] if roots is None else roots, "servers": [server]}
 
 
 def _write(database, payload: bytes) -> None:
@@ -126,7 +128,7 @@ def test_unreadable_file_and_symlink_do_not_publish(mcp_db):
     assert reload_configuration().reason == "unreadable"
     os.chmod(path, 0o600)
     os.remove(path)
-    os.symlink("/bin/ls", path)
+    os.symlink(TRUSTED_EXECUTABLE, path)
     assert reload_configuration().reason == "unreadable"
     assert current_snapshot() is None
 
@@ -141,10 +143,10 @@ def test_failed_reload_keeps_the_committed_snapshot(mcp_db):
     assert loader._snapshot.revision == committed
     assert mcp_status().available is False
 
-    _write(mcp_db, _bytes(_document(executable="/bin/echo")))
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
 
     def change_again():
-        _write(mcp_db, _bytes(_document(executable="/usr/bin/true", roots=["/usr/bin"])))
+        _write(mcp_db, _bytes(_document(executable=TRUSTED_EXECUTABLE)))
 
     set_reload_fault("before_reread", change_again)
     assert reload_configuration().reason == "mismatch"
@@ -169,7 +171,7 @@ def test_persistence_and_compare_and_swap_failures(mcp_db):
             )
 
     set_reload_fault("before_cas", tamper)
-    _write(mcp_db, _bytes(_document(executable="/bin/echo")))
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
     assert reload_configuration().reason == "conflict"
     assert loader._snapshot.revision == original[0]
     assert loader._snapshot.epoch == original[1]
@@ -224,7 +226,7 @@ def test_startup_recovery_is_idempotent_and_fails_closed(mcp_db):
     assert recover_configuration().epoch == loaded[1]
     assert _row(mcp_db) == loaded
 
-    _write(mcp_db, _bytes(_document(executable="/bin/echo")))
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
     changed = mcp_status()
     assert changed.available is False
     assert changed.reason == "mismatch"
@@ -236,7 +238,7 @@ def test_startup_recovery_is_idempotent_and_fails_closed(mcp_db):
     assert restored.epoch == loaded[1]
     assert _row(mcp_db) == loaded
 
-    _write(mcp_db, _bytes(_document(executable="/bin/echo")))
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
     loader._snapshot = None
     assert recover_configuration().reason == "mismatch"
     assert recover_configuration().available is False
@@ -260,7 +262,7 @@ def test_sighup_reloads_and_a_file_edit_does_not(mcp_db):
     handle_sighup(signal.SIGHUP, None)
     assert _row(mcp_db)[1] == 1
     assert mcp_status().available is False
-    _write(mcp_db, _bytes(_document(executable="/bin/echo")))
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
     before = _row(mcp_db)
     assert mcp_status().reason == "mismatch"
     assert current_snapshot() is None
@@ -268,7 +270,8 @@ def test_sighup_reloads_and_a_file_edit_does_not(mcp_db):
     entered = threading.Event()
     release = threading.Event()
     set_reload_fault("before_reread", lambda: entered.set() or release.wait(5))
-    _write(mcp_db, _bytes(_document(executable="/usr/bin/true", roots=["/usr/bin"])))
+    # Must differ from the committed primary revision so SIGHUP publishes epoch 2.
+    _write(mcp_db, _bytes(_document(executable=TRUSTED_ALT_EXECUTABLE)))
     threads = [threading.Thread(target=lambda: handle_sighup(signal.SIGHUP, None)) for _ in range(2)]
     threads[0].start()
     assert entered.wait(5)

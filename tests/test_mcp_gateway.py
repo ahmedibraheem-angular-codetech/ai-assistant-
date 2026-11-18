@@ -49,6 +49,7 @@ from app.mcp.session import retire_older_epochs, set_epoch_listener
 from app.tools.executor import ToolExecutor
 from app.tools.registry import get_tool_registry
 from app.tools.worker import ALLOWED_TOOLS
+from tests.mcp_trust import TRUSTED_ALT_EXECUTABLE, TRUSTED_EXECUTABLE, TRUSTED_ROOT
 from tests.test_agents import create_agent
 from tests.test_tools import grant
 
@@ -224,15 +225,16 @@ def runtime(monkeypatch):
     loader._snapshot = None
 
 
-def _document(agent_id: str, executable: str = "/bin/ls") -> dict:
+def _document(agent_id: str, executable: str | None = None) -> dict:
+    path = TRUSTED_EXECUTABLE if executable is None else executable
     return {
-        "executable_roots": ["/bin"],
+        "executable_roots": [TRUSTED_ROOT],
         "servers": [
             {
                 "id": "notes",
                 "display_name": "Local notes",
                 "enabled": True,
-                "executable": executable,
+                "executable": path,
                 "args": [],
                 "env": {},
                 "agent_ids": [agent_id],
@@ -377,7 +379,7 @@ def test_reload_before_permit_writes_no_frame(client, database_file):
     proposed = _propose(client, agent["id"])
 
     def publish_first() -> None:
-        _write_config(database_file, _document(agent["id"], executable="/bin/echo"))
+        _write_config(database_file, _document(agent["id"], executable=TRUSTED_ALT_EXECUTABLE))
         assert reload_configuration().published is True
 
     set_before_permit(publish_first)
@@ -397,7 +399,7 @@ def test_reload_blocks_while_the_permit_is_held(client, database_file):
         order.append("permit")
 
         def reload() -> None:
-            _write_config(database_file, _document(agent["id"], executable="/bin/echo"))
+            _write_config(database_file, _document(agent["id"], executable=TRUSTED_ALT_EXECUTABLE))
             reload_configuration()
 
         threading.Thread(target=reload, daemon=True).start()
