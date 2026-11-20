@@ -69,6 +69,30 @@
   </section>
 }
 
+@if (digest(); as d) {
+  @if (d.runs.length) {
+    <section class="card digest" aria-labelledby="digest-h">
+      <div class="card-head">
+        <h2 id="digest-h">ما تعلمه الفريق (آخر 24 ساعة)</h2>
+        <span class="small muted">{{ d.runs.length }} جلسة مذاكرة</span>
+      </div>
+      <div class="digest-stats">
+        <span class="badge tone-warn">{{ d.lessons_to_review }} درس للمراجعة</span>
+        <span class="badge tone-ok">{{ d.skills_promoted }} مهارة رُقّيت</span>
+        @if (d.skills_rejected) { <span class="badge tone-muted">{{ d.skills_rejected }} رُفضت</span> }
+        @if (d.approvals_waiting) { <span class="badge tone-warn">{{ d.approvals_waiting }} موافقة تنتظر</span> }
+      </div>
+      @for (r of d.runs.slice(0, 5); track r.id) {
+        <div class="digest-run">
+          <a [routerLink]="['/team', r.agent_id]" dir="auto">{{ agentName(r.agent_id) }}</a>
+          <span class="small" dir="auto">{{ r.summary }}</span>
+          <span class="small muted">{{ ago(r.started_at) }}</span>
+        </div>
+      }
+    </section>
+  }
+}
+
 @if (loading() && !agents().length) {
   <p class="muted center" role="status">جارٍ التحميل…</p>
 } @else {

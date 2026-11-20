@@ -11,7 +11,13 @@ import {
   ApprovalList,
   ChatReply,
   ConversationList,
+  EntryKind,
+  GraphEntity,
+  GraphLookup,
   HireResult,
+  Project,
+  ProjectBrief,
+  StudyDigest,
   Lesson,
   MessageList,
   Skill,
@@ -186,6 +192,50 @@ export class AssistantApi {
 
   studyNow(id: string): Promise<Record<string, unknown>> {
     return this.request('POST', `/api/v1/agents/${encodeURIComponent(id)}/study-now`);
+  }
+
+  studyDigest(hours = 24): Promise<StudyDigest> {
+    return this.request('GET', `/api/v1/study/digest?hours=${hours}`);
+  }
+
+  projects(includeArchived = false): Promise<{ projects: Project[]; count: number }> {
+    return this.request('GET', `/api/v1/projects${includeArchived ? '?include_archived=true' : ''}`);
+  }
+
+  createProject(name: string, description: string): Promise<Project> {
+    return this.request('POST', '/api/v1/projects', { name, description });
+  }
+
+  setProjectArchived(id: string, archived: boolean): Promise<Project> {
+    return this.request('PATCH', `/api/v1/projects/${encodeURIComponent(id)}`, { archived });
+  }
+
+  brief(id: string): Promise<ProjectBrief> {
+    return this.request('GET', `/api/v1/projects/${encodeURIComponent(id)}/brief`);
+  }
+
+  addEntry(projectId: string, kind: EntryKind, text: string): Promise<unknown> {
+    return this.request('POST', `/api/v1/projects/${encodeURIComponent(projectId)}/entries`, { kind, text });
+  }
+
+  setTaskDone(entryId: string, done: boolean): Promise<unknown> {
+    return this.request('PATCH', `/api/v1/project-entries/${encodeURIComponent(entryId)}`, { done });
+  }
+
+  entities(): Promise<{ entities: GraphEntity[]; count: number }> {
+    return this.request('GET', '/api/v1/graph/entities');
+  }
+
+  lookup(name: string): Promise<GraphLookup> {
+    return this.request('GET', `/api/v1/graph/lookup?name=${encodeURIComponent(name)}`);
+  }
+
+  addRelation(subject: string, relation: string, object: string): Promise<unknown> {
+    return this.request('POST', '/api/v1/graph/relations', { subject, relation, object });
+  }
+
+  deleteRelation(id: string): Promise<unknown> {
+    return this.request('DELETE', `/api/v1/graph/relations/${encodeURIComponent(id)}`);
   }
 
   conversations(limit = 50): Promise<ConversationList> {

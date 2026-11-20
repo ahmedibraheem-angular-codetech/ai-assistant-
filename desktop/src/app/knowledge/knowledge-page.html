@@ -1,0 +1,86 @@
+<header class="top">
+  <div class="title">
+    <h1>خريطة المعرفة</h1>
+    <p class="muted">الأشخاص والمشاريع والجهات والعلاقات بينهم، كما سجّلتها أنت والوكلاء.</p>
+  </div>
+  <label for="kg-search" class="visually-hidden">بحث</label>
+  <input id="kg-search" class="search" placeholder="ابحث في الخريطة…" dir="auto" [ngModel]="search()" (ngModelChange)="search.set($event)">
+</header>
+
+@if (error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+}
+
+<div class="split">
+  <section class="card list" aria-label="العناصر">
+    @for (g of groups(); track g.type) {
+      <h2>{{ g.label }} <span class="small muted">{{ g.items.length }}</span></h2>
+      @for (e of g.items; track e.id) {
+        <button type="button" class="entity" [attr.aria-pressed]="selected()?.id === e.id" (click)="open(e)">
+          <span dir="auto">{{ e.name }}</span>
+          @if (e.author === 'agent') { <span class="tag">وكيل</span> }
+        </button>
+      }
+    } @empty {
+      <div class="empty">
+        <p>{{ search() ? 'لا نتائج.' : 'الخريطة فارغة.' }}</p>
+        <p class="small muted">أضف علاقة من النموذج، أو يسجّلها الوكلاء أثناء العمل.</p>
+      </div>
+    }
+  </section>
+
+  <div class="main">
+    @if (selected(); as e) {
+      <section class="card" aria-labelledby="ent-h">
+        <div class="card-head">
+          <h2 id="ent-h" dir="auto">{{ e.name }}</h2>
+          <span class="tag">{{ typeLabel(e.type) }} · {{ authorLabel(e.author) }}</span>
+        </div>
+        @if (e.description) {
+          <p class="muted" dir="auto">{{ e.description }}</p>
+        }
+        <div class="graph" aria-hidden="true">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+            @for (edge of graph().edges; track edge.id) {
+              <line x1="50" y1="50" [attr.x2]="edge.x" [attr.y2]="edge.y" [class.out]="edge.outgoing"></line>
+            }
+          </svg>
+          <div class="center" dir="auto">{{ e.name }}</div>
+          @for (n of graph().nodes; track n.name) {
+            <button type="button" class="node" [style.left.%]="n.x" [style.top.%]="n.y" tabindex="-1" (click)="openByName(n.name)" dir="auto">{{ n.name }}</button>
+          }
+        </div>
+        <h3>العلاقات</h3>
+        @for (r of relations(); track r.id) {
+          <div class="relation">
+            <span dir="auto"><b>{{ r.subject }}</b> <span class="pred">{{ r.predicate }}</span> <b>{{ r.object }}</b></span>
+            @if (r.note) { <span class="small muted" dir="auto">{{ r.note }}</span> }
+            <span class="tag">{{ authorLabel(r.author) }}</span>
+            <button type="button" class="small-btn" [disabled]="busy()" [attr.aria-label]="'احذف العلاقة ' + r.predicate" (click)="removeRelation(r)">حذف</button>
+          </div>
+        } @empty {
+          <p class="small muted">لا علاقات مسجلة لهذا العنصر.</p>
+        }
+        @if (graph().hidden) {
+          <p class="small muted">+{{ graph().hidden }} عنصر آخر مرتبط لا يظهر في الرسم.</p>
+        }
+      </section>
+    } @else {
+      <section class="card hint"><p class="muted">اختر عنصراً من القائمة لترى علاقاته.</p></section>
+    }
+
+    <section class="card" aria-labelledby="add-h">
+      <h2 id="add-h">أضف علاقة</h2>
+      <form class="relation-form" (submit)="$event.preventDefault(); addRelation()">
+        <label for="r-s" class="visually-hidden">الطرف الأول</label>
+        <input id="r-s" name="s" placeholder="أحمد" dir="auto" maxlength="120" [ngModel]="subject()" (ngModelChange)="subject.set($event)">
+        <label for="r-p" class="visually-hidden">العلاقة</label>
+        <input id="r-p" name="p" placeholder="يعمل في" dir="auto" maxlength="60" [ngModel]="predicate()" (ngModelChange)="predicate.set($event)">
+        <label for="r-o" class="visually-hidden">الطرف الثاني</label>
+        <input id="r-o" name="o" placeholder="الشركة" dir="auto" maxlength="120" [ngModel]="object()" (ngModelChange)="object.set($event)">
+        <button type="submit" class="primary" [disabled]="busy()">أضف</button>
+      </form>
+      <p class="small muted">العناصر الجديدة تُنشأ تلقائياً. ما يكتبه الوكلاء يظهر بعلامة «وكيل».</p>
+    </section>
+  </div>
+</div>

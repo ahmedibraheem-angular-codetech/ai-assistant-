@@ -3,7 +3,8 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 
 import { AssistantApi } from '../core/api';
-import { Agent, AgentActivity, AgentTemplate, HireResult } from '../core/models';
+import { Agent, AgentActivity, AgentTemplate, HireResult, StudyDigest } from '../core/models';
+import { ago } from '../dashboard/dashboard-view';
 import { activityLine, budgetLabel } from './team-view';
 
 @Component({
@@ -19,6 +20,8 @@ export class TeamPage {
   readonly agents = signal<Agent[]>([]);
   readonly activity = signal<Record<string, AgentActivity>>({});
   readonly templates = signal<AgentTemplate[]>([]);
+  readonly digest = signal<StudyDigest | null>(null);
+  readonly ago = ago;
   readonly loading = signal(true);
   readonly error = signal('');
 
@@ -44,8 +47,13 @@ export class TeamPage {
   async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [list, summary] = await Promise.all([this.api.agents(), this.api.analytics('today')]);
+      const [list, summary, digest] = await Promise.all([
+        this.api.agents(),
+        this.api.analytics('today'),
+        this.api.studyDigest(24).catch(() => null),
+      ]);
       this.agents.set(list.agents);
+      this.digest.set(digest);
       this.activity.set(Object.fromEntries(summary.agents.map((a) => [a.id, a])));
       this.error.set('');
     } catch (error) {
@@ -99,6 +107,10 @@ export class TeamPage {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  agentName(id: string): string {
+    return this.agents().find((a) => a.id === id)?.name ?? 'وكيل';
   }
 
   openProfile(id: string): void {

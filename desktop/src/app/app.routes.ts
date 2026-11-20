@@ -4,6 +4,8 @@ import { ApprovalsPage } from './approvals/approvals-page';
 import { ChatPage } from './chat/chat-page';
 import { CustomizePage } from './customize/customize-page';
 import { DashboardPage } from './dashboard/dashboard-page';
+import { KnowledgePage } from './knowledge/knowledge-page';
+import { ProjectsPage } from './projects/projects-page';
 import { AgentPage } from './team/agent-page';
 import { TeamPage } from './team/team-page';
 
@@ -27,5 +29,7 @@ export const routes: Routes = [
   { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
   { path: 'team', component: TeamPage, title: 'الفريق' },
   { path: 'team/:id', component: AgentPage, title: 'ملف الوكيل' },
+  { path: 'projects', component: ProjectsPage, title: 'المشاريع' },
+  { path: 'knowledge', component: KnowledgePage, title: 'خريطة المعرفة' },
   { path: '**', redirectTo: '' },
 ];

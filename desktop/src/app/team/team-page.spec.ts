@@ -60,4 +60,13 @@ describe('TeamPage', () => {
     await settle(fixture);
     expect(el.querySelector('.empty')?.textContent).toContain('لا يوجد وكلاء بعد');
   });
+
+  it('shows what the team learned in the last 24 hours', async () => {
+    const { fixture, el } = setup();
+    await settle(fixture);
+    const digest = el.querySelector('.digest');
+    expect(digest?.textContent).toContain('2 درس للمراجعة');
+    expect(digest?.querySelector('.digest-run')?.textContent).toContain('الباحث');
+    expect(digest?.textContent).toContain('ذاكر إعلانات فيسبوك');
+  });
 });

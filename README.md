@@ -323,6 +323,13 @@ reject), active skills with their steps, active lessons, recent evaluations,
 the study plan (topics, interval, "study now") and the team members it may
 delegate to; it can also stop or start the agent.
 
+**Projects** (`/projects`) shows each project's brief (current status, open
+tasks you can tick done, recent decisions and notes), adds entries of any
+kind, creates and archives projects. **Knowledge** (`/knowledge`) lists graph
+entities by type with search; picking one draws its neighbours and lists its
+relations (add or delete). Entries and entities written by agents are marked.
+The team page also shows the **study digest** of the last 24 hours.
+
 The **approvals page** (`/approvals`, with a count badge in the side menu)
 lists pending requests and the history. A request shows its tool, agent,
 risk, reason, the sealed arguments (secret values hidden), a file-change

@@ -1,0 +1,110 @@
+<header class="top">
+  <div class="title">
+    <h1>المشاريع</h1>
+    <p class="muted">ذاكرة كل مشروع: الحالة والمهام والقرارات والملاحظات. يقرأها الوكلاء ليكملوا من حيث توقفوا.</p>
+  </div>
+  <button type="button" (click)="toggleArchivedView()">{{ showArchived() ? 'أخفِ المؤرشفة' : 'أظهر المؤرشفة' }}</button>
+  <button type="button" class="primary" (click)="creating.set(!creating())">مشروع جديد</button>
+</header>
+
+@if (error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+}
+
+@if (creating()) {
+  <form class="card create" (submit)="$event.preventDefault(); create()">
+    <label for="p-name">الاسم</label>
+    <input id="p-name" name="name" dir="auto" maxlength="100" [ngModel]="newName()" (ngModelChange)="newName.set($event)">
+    <label for="p-desc">الوصف (اختياري)</label>
+    <textarea id="p-desc" name="desc" rows="2" dir="auto" maxlength="4000" [ngModel]="newDescription()" (ngModelChange)="newDescription.set($event)"></textarea>
+    <div class="actions">
+      <button type="submit" class="primary" [disabled]="busy() || !newName().trim()">أنشئ</button>
+      <button type="button" (click)="creating.set(false)">إلغاء</button>
+    </div>
+  </form>
+}
+
+<div class="split">
+  <section class="card list" aria-label="المشاريع">
+    @for (p of projects(); track p.id) {
+      <button type="button" class="project" [attr.aria-pressed]="selectedId() === p.id" (click)="select(p.id)">
+        <span dir="auto">{{ p.name }}</span>
+        @if (p.archived) { <span class="tag">مؤرشف</span> }
+      </button>
+    } @empty {
+      <div class="empty">
+        <p>لا مشاريع بعد.</p>
+        <p class="small muted">أنشئ مشروعاً، أو اطلب من وكيل أن يسجّل قراراته في مشروع.</p>
+      </div>
+    }
+  </section>
+
+  @if (brief(); as b) {
+    <article class="main">
+      <section class="card">
+        <div class="head">
+          <h2 dir="auto">{{ b.project.name }}</h2>
+          <button type="button" class="small-btn" [disabled]="busy()" (click)="setArchived(!b.project.archived)">
+            {{ b.project.archived ? 'أعده من الأرشيف' : 'أرشف' }}
+          </button>
+        </div>
+        @if (b.project.description) {
+          <p class="muted" dir="auto">{{ b.project.description }}</p>
+        }
+        <div class="status">
+          <span class="small muted">الحالة الآن</span>
+          @if (b.current_status[0]; as s) {
+            <p dir="auto">{{ s.text }}</p>
+            <span class="small muted">{{ authorLabel(s.author) }} · {{ ago(s.at) }}</span>
+          } @else {
+            <p class="muted">لم تُسجل حالة بعد.</p>
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>المهام المفتوحة <span class="small muted">· {{ b.done_tasks }} منجزة</span></h3>
+        @for (t of b.open_tasks; track t.id) {
+          <label class="task">
+            <input type="checkbox" [disabled]="busy()" (change)="setDone(t.id, true)">
+            <span dir="auto">{{ t.text }}</span>
+            @if (t.author === 'agent') { <span class="tag">وكيل</span> }
+          </label>
+        } @empty {
+          <p class="small muted">لا مهام مفتوحة.</p>
+        }
+      </section>
+
+      <div class="two">
+        <section class="card">
+          <h3>آخر القرارات</h3>
+          @for (d of b.recent_decisions; track d.id) {
+            <div class="entry"><p dir="auto">{{ d.text }}</p><span class="small muted">{{ authorLabel(d.author) }} · {{ ago(d.at) }}</span></div>
+          } @empty {
+            <p class="small muted">لا قرارات بعد.</p>
+          }
+        </section>
+        <section class="card">
+          <h3>آخر الملاحظات</h3>
+          @for (n of b.recent_notes; track n.id) {
+            <div class="entry"><p dir="auto">{{ n.text }}</p><span class="small muted">{{ authorLabel(n.author) }} · {{ ago(n.at) }}</span></div>
+          } @empty {
+            <p class="small muted">لا ملاحظات بعد.</p>
+          }
+        </section>
+      </div>
+
+      <form class="card add" (submit)="$event.preventDefault(); addEntry()">
+        <h3>أضف إلى المشروع</h3>
+        <div class="kinds" role="group" aria-label="النوع">
+          @for (k of kinds; track k.id) {
+            <button type="button" [attr.aria-pressed]="kind() === k.id" (click)="kind.set(k.id)">{{ k.label }}</button>
+          }
+        </div>
+        <label for="e-text" class="visually-hidden">النص</label>
+        <textarea id="e-text" name="text" rows="2" dir="auto" placeholder="اكتب هنا…" [ngModel]="text()" (ngModelChange)="text.set($event)"></textarea>
+        <button type="submit" class="primary" [disabled]="busy() || !text().trim()">أضف</button>
+      </form>
+    </article>
+  }
+</div>

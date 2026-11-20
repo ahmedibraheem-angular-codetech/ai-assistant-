@@ -257,3 +257,77 @@ export interface StudyPlan {
   last_run_at: string | null;
   next_run_at: string;
 }
+
+// Projects, knowledge graph, study digest (app/projects/core.py, app/graph/core.py, app/learning/study.py).
+
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EntryKind = 'decision' | 'task' | 'note' | 'status';
+
+export interface BriefItem {
+  id: string;
+  text: string;
+  author: 'user' | 'agent';
+  at: string;
+}
+
+export interface ProjectBrief {
+  project: Project;
+  current_status: BriefItem[];
+  open_tasks: BriefItem[];
+  recent_decisions: BriefItem[];
+  recent_notes: BriefItem[];
+  done_tasks: number;
+}
+
+export type EntityType = 'person' | 'project' | 'organization' | 'place' | 'topic' | 'other';
+
+export interface GraphEntity {
+  id: string;
+  type: EntityType;
+  name: string;
+  description: string;
+  author: 'user' | 'agent';
+  agent_id: string | null;
+  updated_at: string;
+}
+
+export interface GraphRelation {
+  id: string;
+  subject: string;
+  subject_type: EntityType;
+  predicate: string;
+  object: string;
+  object_type: EntityType;
+  note: string;
+  author: 'user' | 'agent';
+}
+
+export interface GraphLookup {
+  matches: { entity: GraphEntity; relations: GraphRelation[] }[];
+}
+
+export interface StudyRun {
+  id: string;
+  agent_id: string;
+  started_at: string;
+  status: string;
+  summary: string;
+  detail: Record<string, unknown>;
+}
+
+export interface StudyDigest {
+  since: string;
+  runs: StudyRun[];
+  lessons_to_review: number;
+  approvals_waiting: number;
+  skills_promoted: number;
+  skills_rejected: number;
+}

@@ -52,6 +52,12 @@ export function fakeServer(state: { agents: Agent[]; plan?: StudyPlan | null; me
       return ok({ agents: state.agents.map((a) => ({ ...a })), count: state.agents.length });
     }
     if (path.startsWith('/api/v1/analytics/summary')) return ok(summary({ agents: [] }));
+    if (path.startsWith('/api/v1/study/digest')) {
+      return ok({
+        since: '', lessons_to_review: 2, approvals_waiting: 0, skills_promoted: 1, skills_rejected: 0,
+        runs: [{ id: 'run1', agent_id: 'a1', started_at: '2026-11-21T09:00:00Z', status: 'done', summary: 'ذاكر إعلانات فيسبوك', detail: {} }],
+      });
+    }
     if (path === '/api/v1/agent-templates') return ok({ templates: [TEMPLATE], count: 1 });
     if (path === '/api/v1/agents/hire') {
       const hired = agentRow('new', String((body as { name?: string }).name ?? 'x'));
