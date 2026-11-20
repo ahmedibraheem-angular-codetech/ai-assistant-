@@ -187,6 +187,16 @@ Agents use `project_brief` (read) and `record_project_entry` (append-only:
 add entries or mark a task done; no edit or delete). Agent entries are labeled
 and you can delete any entry. Hired agents get both tools.
 
+### Knowledge search: hybrid ranking and image text
+
+`search_knowledge` ranks by meaning (embeddings) mixed with keyword overlap,
+so exact names, codes, and numbers are found. Arabic spelling variants are
+matched (أ/إ/ا, ة/ه, ى/ي, diacritics, Arabic-Indic digits, the "ال" article).
+
+Images (`.png .jpg .jpeg .heic .tiff .bmp .gif .webp`) can be ingested: their
+text is read locally with macOS Vision OCR (Arabic and English), with no
+download or extra package.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

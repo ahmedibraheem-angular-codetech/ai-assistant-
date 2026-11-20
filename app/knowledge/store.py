@@ -379,8 +379,15 @@ def search_authorized(
     max_results: int,
     budget_bytes: int,
     excerpt_chars: int,
+    query_text: str = "",
 ) -> dict:
-    """Count and scan eligible chunks on one connection. Unauthorized ids are absent."""
+    """Count and scan eligible chunks on one connection. Unauthorized ids are absent.
+
+    Ranking is hybrid: vector similarity mixed with keyword overlap (see lexical.py).
+    """
+    from app.knowledge.lexical import combine, keyword_score, terms
+
+    query_terms = terms(query_text)
     if not allowed_documents:
         return {"results": [], "notice": _INSUFFICIENT, "citations": []}
     excerpt_bytes = excerpt_chars * 4
@@ -443,7 +450,11 @@ def search_authorized(
         vector_bytes = int(widest or 0)
         if vector_bytes and heap_bytes + (2 * vector_bytes) + excerpt_bytes + _METADATA_BYTES > budget_bytes:
             return {"results": [], "notice": _MEMORY, "citations": [], "candidate_count": count}
-        per_candidate = (2 * vector_bytes) + excerpt_bytes + _METADATA_BYTES
+        from app.core.config import get_settings
+
+        # Hybrid ranking reads each chunk's full text; count it in the budget.
+        full_text_bytes = get_settings().knowledge_chunk_chars * 4
+        per_candidate = (2 * vector_bytes) + excerpt_bytes + full_text_bytes + _METADATA_BYTES
         room = 0 if per_candidate <= 0 or heap_bytes >= budget_bytes else (budget_bytes - heap_bytes) // per_candidate
         page_size = min(batch_limit, int(room))
         if count and page_size < 1:
@@ -455,7 +466,7 @@ def search_authorized(
             rows = connection.execute(
                 text(
                     """
-                    SELECT c.document_id, c.ordinal, substr(c.text, 1, :excerpt) AS excerpt,
+                    SELECT c.document_id, c.ordinal, substr(c.text, 1, :excerpt) AS excerpt, c.text AS full_text,
                            c.page_number, c.section, c.source_filename, c.embedding, d.filename
                     FROM knowledge_chunks c
                     JOIN knowledge_allowed allowed ON allowed.document_id = c.document_id
@@ -487,7 +498,9 @@ def search_authorized(
                 vector = unpack_vector(row["embedding"])
                 if vector is None or len(vector) != dimensions:
                     continue
-                score = _cosine(query, vector)
+                vector_score = _cosine(query, vector)
+                lexical = keyword_score(query_terms, row["full_text"]) if query_terms else 0.0
+                score = combine(vector_score, lexical) if query_terms else vector_score
                 item = {
                     "document_id": row["document_id"],
                     "ordinal": row["ordinal"],
@@ -496,6 +509,8 @@ def search_authorized(
                     "section": row["section"],
                     "filename": row["source_filename"] or row["filename"],
                     "score": score,
+                    "vector_score": vector_score,
+                    "keyword_score": lexical,
                 }
                 ranked.append((score, row["document_id"], int(row["ordinal"]), item))
                 ranked.sort(key=lambda entry: (-entry[0], entry[1], entry[2]))

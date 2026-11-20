@@ -12,6 +12,13 @@ _UNREADABLE = "The file could not be read."
 
 
 def segments_from_bytes(data: bytes, extension: str, *, output_chars: int) -> list[Segment]:
+    from app.knowledge.ocr import IMAGE_EXTENSIONS, image_text
+
+    if extension.lower() in IMAGE_EXTENSIONS:
+        text = image_text(data, extension)[:output_chars]
+        if not text.strip():
+            raise FileAccessError("No text was found in that image.")
+        return [Segment(text=text, page_number=None, section="image")]
     kind = category_for(extension)
     if kind == "pdf":
         return _pdf_segments(data, output_chars)

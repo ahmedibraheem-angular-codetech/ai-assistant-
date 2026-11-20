@@ -121,6 +121,7 @@ class KnowledgeService:
             max_results=settings.knowledge_max_results,
             budget_bytes=settings.knowledge_memory_budget_bytes,
             excerpt_chars=excerpt_chars,
+            query_text=str(arguments.get("query") or ""),
         )
         body["data_boundary"] = "untrusted_document_content"
         body["notice"] = body.get("notice") or _UNTRUSTED
@@ -156,7 +157,8 @@ class KnowledgeService:
             raise ToolExecutionError(_CHANGED)
         settings = get_settings()
         try:
-            segments = segments_from_bytes(
+            segments = await asyncio.to_thread(
+                segments_from_bytes,
                 payload,
                 Path(canonical).suffix,
                 output_chars=settings.knowledge_max_file_bytes,
