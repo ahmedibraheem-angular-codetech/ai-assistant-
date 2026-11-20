@@ -78,6 +78,11 @@ class AgentExecutionService:
         agent_id: str | None,
     ) -> str:
         """Answer one turn. Tools run only when this caller has grants."""
+        from app.core.controls import AssistantBlockedError, consume_chat_turn
+
+        refused = consume_chat_turn(agent_id)
+        if refused is not None:
+            raise AssistantBlockedError(refused)
         if self.tools is None:
             return await self.provider.chat(
                 model=model,

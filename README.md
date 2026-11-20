@@ -109,6 +109,21 @@ sensitive tools always ask); only in `ask_sensitive` mode (`always_ask` keeps
 asking); tool, workspace, and path grants still apply; sensitive files such as
 `.env` stay blocked. Every add and revoke is written to the permission audit.
 
+### Pause (kill switch) and daily budgets
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/control/pause \
+  -H "Content-Type: application/json" -d '{"reason":"stop everything"}'
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/control/resume
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/control/agents/<agent>/budget -d '{"daily_tool_calls":200,"daily_chat_turns":100}'
+```
+
+While paused, no tool starts, no model call is made, and running file workers
+are killed. The pause survives restarts. Budgets are daily (UTC) per agent;
+`AGENT_DAILY_TOOL_CALLS` / `AGENT_DAILY_CHAT_TURNS` set a default for all
+agents. Usage counters reset when the server restarts.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

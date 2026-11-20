@@ -7,6 +7,7 @@ from app.api.routes import (
     approvals,
     recoveries,
     chat,
+    control,
     conversations,
     health,
     memories,
@@ -29,6 +30,9 @@ async def lifespan(_app: FastAPI):
             "The API must stay on localhost. Remote access is not supported."
         )
     init_database()
+    from app.core.controls import load as load_controls
+
+    load_controls()
     # WP-05A: take the serve lease and load the token before serving anything.
     lease = ServeLease.acquire()
     _app.state.auth_token = lease.token
@@ -92,3 +96,4 @@ app.include_router(workspaces.router, prefix=settings.api_prefix, tags=["Workspa
 app.include_router(permissions.router, prefix=settings.api_prefix, tags=["Permissions"])
 app.include_router(approvals.router, prefix=settings.api_prefix, tags=["Approvals"])
 app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recoveries"])
+app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])

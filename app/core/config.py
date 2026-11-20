@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     # Concurrent MCP server processes. Each one is a child process on this Mac.
     mcp_max_processes: int = Field(default=2, ge=1, le=16)
+    # Default daily limits per agent. Empty means unlimited; per-agent budgets override.
+    agent_daily_tool_calls: int | None = Field(default=None, ge=1, le=100_000)
+    agent_daily_chat_turns: int | None = Field(default=None, ge=1, le=100_000)
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

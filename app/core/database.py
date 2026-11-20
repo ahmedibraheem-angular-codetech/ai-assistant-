@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
-CURRENT_SCHEMA_VERSION = 17
+CURRENT_SCHEMA_VERSION = 18
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -84,6 +84,7 @@ def init_database() -> None:
     from app.memories import models as memory_models
     from app.approvals import models as approval_models
     from app.permissions import models as permission_models
+    from app.core import controls
     from app.tools import models as tool_models
 
     _ = (
@@ -101,6 +102,7 @@ def init_database() -> None:
         permission_models.CapabilityPreferenceRecord,
         permission_models.PermissionAuditRecord,
         permission_models.StandingApprovalRecord,
+        controls.AssistantControlRecord,
         approval_models.ApprovalRequestRecord,
     )
     from app.approvals.payloads import McpExecutionPayloadRecord

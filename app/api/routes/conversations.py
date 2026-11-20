@@ -1,3 +1,4 @@
+from app.core.controls import AssistantBlockedError
 from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -67,6 +68,8 @@ def conversation_http_errors():
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except ConversationPersistenceError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except AssistantBlockedError as exc:
+        raise HTTPException(status_code=423, detail=str(exc)) from exc
     except OllamaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     except SQLAlchemyError as exc:

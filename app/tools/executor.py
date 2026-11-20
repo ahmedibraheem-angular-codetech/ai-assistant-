@@ -134,9 +134,16 @@ class ToolExecutor:
         }:
             if not confirmed or not isinstance(approval_id, str) or not approval_id:
                 return ToolOutcome(tool.name, "confirmation_required", None, _CONFIRMATION)
+        if side_effect and not confirmed:
+            return ToolOutcome(tool.name, "confirmation_required", None, _CONFIRMATION)
+        # Kill switch and daily budget: checked and counted only when a tool
+        # will actually start. No database write happens here.
+        from app.core.controls import consume_tool_call
+
+        refused = consume_tool_call(agent_id)
+        if refused is not None:
+            return ToolOutcome(tool.name, "error", None, refused)
         if side_effect:
-            if not confirmed:
-                return ToolOutcome(tool.name, "confirmation_required", None, _CONFIRMATION)
             if policy != SIDE_EFFECT or not _can_isolate(tool):
                 return ToolOutcome(tool.name, "error", None, _UNISOLATED)
             return await self._run_isolated(

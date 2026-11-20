@@ -23,3 +23,13 @@ def client(database_file):
     init_database()
     with LocalClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def _fresh_controls():
+    """Pause state and budget counters must not leak between tests."""
+    from app.core.controls import reset_cache
+
+    reset_cache()
+    yield
+    reset_cache()

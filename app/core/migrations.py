@@ -89,6 +89,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 17:
         upgrade_to_17(engine)
         return
+    if version == 18:
+        upgrade_to_18(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -187,6 +190,13 @@ def upgrade_to_17(engine: Engine) -> None:
     from app.permissions.models import StandingApprovalRecord
 
     StandingApprovalRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_18(engine: Engine) -> None:
+    """Add assistant controls (pause and budgets). No existing table is rewritten."""
+    from app.core.controls import AssistantControlRecord
+
+    AssistantControlRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

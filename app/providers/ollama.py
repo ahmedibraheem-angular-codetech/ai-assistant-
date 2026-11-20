@@ -61,6 +61,10 @@ class OllamaProvider:
         When history is provided, it is the ordered transcript and already
         includes the current user message. That message is not appended again.
         """
+        from app.core.controls import PAUSED_MESSAGE, AssistantBlockedError, is_paused
+
+        if is_paused():
+            raise AssistantBlockedError(PAUSED_MESSAGE)
         messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
