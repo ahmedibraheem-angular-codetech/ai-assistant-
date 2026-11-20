@@ -89,3 +89,15 @@ Next modules: configuration/core, model registry and per-agent model assignment,
 GitHub Actions workflow `.github/workflows/wp02-linux.yml` runs the WP-02 process
 security tests on Ubuntu (`ubuntu-latest`), including real `execveat` coverage that
 cannot be verified on macOS alone.
+
+## Known limits (by design)
+
+- **MCP call timeouts (R-02):** if an MCP tool call times out, its result is
+  reported as `unknown`. The server is not told to cancel, so the remote action
+  may still have happened. Check before retrying anything with side effects.
+- **Stopping a tool does not undo it (R-03):** a timeout, cancel, or kill stops
+  the worker but cannot undo work it already finished. File changes made
+  through the assistant are journaled and can be restored from
+  `/api/v1/file-recoveries`; other side effects cannot.
+- **MCP process limit (R-17):** at most `MCP_MAX_PROCESSES` (default 2) MCP
+  servers run at once.

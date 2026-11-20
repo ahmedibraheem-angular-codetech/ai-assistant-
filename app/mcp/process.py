@@ -125,11 +125,16 @@ class ChildProcess:
     def alive(self) -> bool:
         if self.reaped:
             return False
-        try:
-            waited, _status = os.waitpid(self.pid, os.WNOHANG)
-        except ChildProcessError:
-            self.reaped = True
-            return False
+        while True:
+            try:
+                waited, _status = os.waitpid(self.pid, os.WNOHANG)
+            except ChildProcessError:
+                self.reaped = True
+                return False
+            except InterruptedError:
+                # R-01: WNOHANG returns at once, so retrying cannot hang.
+                continue
+            break
         if waited == 0:
             return True
         self.reaped = True
@@ -178,6 +183,11 @@ class ChildProcess:
                 self.reaped = True
                 self._close_fds()
                 return True
+            except InterruptedError:
+                # R-01: same EINTR handling as _reap_failed_child, bounded by the deadline.
+                if deadline is not None and deadline - time.monotonic() <= 0:
+                    return False
+                continue
             if waited != 0:
                 self.reaped = True
                 self._close_fds()

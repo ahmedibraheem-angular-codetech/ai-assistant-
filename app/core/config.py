@@ -75,6 +75,8 @@ class Settings(BaseSettings):
     knowledge_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     # Local API only. Authentication is required before any non-loopback deployment.
     api_host: str = "127.0.0.1"
+    # Concurrent MCP server processes. Each one is a child process on this Mac.
+    mcp_max_processes: int = Field(default=2, ge=1, le=16)
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

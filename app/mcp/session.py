@@ -88,7 +88,6 @@ IDLE_TIMEOUT = 60.0
 STDIN_GRACE = 2.0
 TERM_GRACE = 2.0
 NOTIFY_LIMIT = 32
-MAX_PROCESSES = 2
 MAX_TOMBSTONES = 64
 
 _registry = threading.Lock()
@@ -141,7 +140,8 @@ class _Timing:
     stdin_grace: float = STDIN_GRACE
     term_grace: float = TERM_GRACE
     notify_limit: int = NOTIFY_LIMIT
-    max_processes: int = MAX_PROCESSES
+    # None means the MCP_MAX_PROCESSES setting (R-17). Tests set an explicit number.
+    max_processes: int | None = None
     max_tombstones: int = MAX_TOMBSTONES
     list_seconds: float = LIST_TIMEOUT
     call_seconds: float = CALL_TIMEOUT
@@ -322,7 +322,7 @@ def open_session(server_id: str) -> McpSession:
                     current = _inflight.get(server_id)
                     if current is not None:
                         reservation = current
-                    elif len(_tracked_server_ids_locked()) >= _timing.max_processes:
+                    elif len(_tracked_server_ids_locked()) >= _max_processes():
                         raise SessionError("busy")
                     else:
                         reservation = _Reservation()
@@ -1260,3 +1260,12 @@ def _close_pipe(session: McpSession, name: str) -> None:
 
 
 set_epoch_listener(retire_older_epochs)
+
+
+def _max_processes() -> int:
+    """Concurrent MCP children allowed (R-17: configurable, default 2)."""
+    if _timing.max_processes is not None:
+        return _timing.max_processes
+    from app.core.config import get_settings
+
+    return get_settings().mcp_max_processes
