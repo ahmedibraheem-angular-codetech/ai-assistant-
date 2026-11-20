@@ -45,7 +45,7 @@ class ResearchAgent:
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
     async def run(self, task: str, *, agent_id: str | None) -> dict:
-        self._authorize(agent_id)
+        self._authorize(agent_id, task)
         task_id = uuid4().hex
         providers = provider_label([provider.name for provider in self.providers])
         begin_research_audit(task_id, agent_id, providers)
@@ -63,7 +63,7 @@ class ResearchAgent:
         finish_research_audit(task_id, agent_id, providers, "completed")
         return report
 
-    def _authorize(self, agent_id: str | None) -> None:
+    def _authorize(self, agent_id: str | None, task: str) -> None:
         from app.permissions.service import evaluate_request
         from app.tools.registry import get_tool_registry
 
@@ -76,9 +76,12 @@ class ResearchAgent:
             relative_path=None,
             registry=get_tool_registry(),
         )
-        if decision.decision != ALLOW:
-            deny_research_audit(agent_id, decision.decision)
-            raise ToolPermissionError("research")
+        if decision.decision == ALLOW:
+            return
+        if decision.decision == "REQUIRES_APPROVAL" and _approved_execution(agent_id, task):
+            return
+        deny_research_audit(agent_id, decision.decision)
+        raise ToolPermissionError("research")
 
     async def _gather(self, task: str, task_id: str, agent_id: str | None) -> dict:
         limitations: list[str] = []
@@ -204,6 +207,27 @@ def default_research_agent() -> ResearchAgent:
     if endpoint:
         providers.append(JsonSearchProvider(endpoint, settings.web_search_secondary_key))
     return ResearchAgent(providers=providers, fetcher=PageFetcher())
+
+
+def _approved_execution(agent_id: str | None, task: str) -> bool:
+    """True when the parent already moved this exact research call to EXECUTING.
+
+    Mirrors app.files.authorization: an approval_required decision is satisfied
+    only by an approval bound to this agent, tool, action, and arguments.
+    """
+    from app.approvals.service import execution_matches
+    from app.files.authorization import _APPROVAL, _TOOL
+
+    approval_id = _APPROVAL.get()
+    if _TOOL.get() != "research" or not isinstance(approval_id, str):
+        return False
+    return execution_matches(
+        approval_id,
+        agent_id=agent_id,
+        tool_name="research",
+        action="read",
+        arguments={"task": task},
+    )
 
 
 def _checkpoint() -> None:

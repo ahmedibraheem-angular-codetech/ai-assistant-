@@ -131,12 +131,17 @@ def test_update_crash_stages_reconcile_without_losing_the_original(client, monke
         recoveries = [item for item in _ready(client) if item["workspace_id"] == workspace["id"]]
         assert len(recoveries) == ready_count
         if text == "next":
-            search = client.post(
-                "/api/v1/tools/search_files/test",
-                json={
-                    "arguments": {"workspace_id": workspace["id"], "query": "keep"},
-                    "agent_id": agent["id"],
-                },
+            from tests.approval_support import finish_tool_test
+
+            search = finish_tool_test(
+                client,
+                client.post(
+                    "/api/v1/tools/search_files/test",
+                    json={
+                        "arguments": {"workspace_id": workspace["id"], "query": "keep"},
+                        "agent_id": agent["id"],
+                    },
+                ),
             )
             assert search.status_code == 200, search.text
             assert search.json()["output"]["count"] == 0

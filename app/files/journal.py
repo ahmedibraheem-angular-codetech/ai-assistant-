@@ -40,6 +40,8 @@ def crash_point(stage: str) -> None:
 
     The worker process exits immediately, so later cleanup cannot hide the crash.
     """
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        return
     if os.environ.get("ASSISTANT_FILE_JOURNAL_CRASH") == stage:
         os._exit(86)
 

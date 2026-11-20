@@ -47,7 +47,9 @@ def _manifest(name: str, description: str, *, action: str, sensitive: bool) -> T
         resource_types=("none",),
         actions=(action,),
         risk="sensitive" if sensitive else "read",
-        approval_required=True,
+        # Only mutations need approval (see module docstring). Search and
+        # metadata read documents the user already approved for ingestion.
+        approval_required=sensitive,
         read_only=not sensitive,
         execution_policy=ASYNC_READ_ONLY,
     )

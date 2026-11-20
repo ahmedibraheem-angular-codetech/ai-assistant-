@@ -41,6 +41,7 @@ from app.tools.registry import get_tool_registry
 from app.tools.web_search import SearchHit
 from tests.test_agents import create_agent
 from tests.test_permissions import _mode
+from tests.approval_support import finish_tool_test, prime_executing_approval
 from tests.test_tools import grant, scripted_chat, tool_call
 
 _SECRET = "super-secret-key"
@@ -151,6 +152,24 @@ def agent_for(client, name="Parent Agent"):
     )
     grant(client, created["id"], ["research"])
     return created
+
+
+async def approved_run(client, service, task, agent_id):
+    """Run research the way the approval flow does: bound to an EXECUTING approval.
+
+    research declares approval_required, so ask_sensitive needs a matching
+    approval before ResearchAgent._authorize accepts the call.
+    """
+    from app.files.authorization import bind_file_actor, reset_file_actor
+
+    approval_id = prime_executing_approval(
+        client, agent_id=agent_id, tool_name="research", arguments={"task": task}
+    )
+    tokens = bind_file_actor(agent_id, "research", approval_id)
+    try:
+        return await service.run(task, agent_id=agent_id)
+    finally:
+        reset_file_actor(tokens)
 
 
 def research_rows():
@@ -344,7 +363,7 @@ async def test_multiple_queries_duplicates_and_provider_failure(client, research
         limits=limits(retries=0),
         limiter=RateLimiter(10),
     )
-    report = await service.run("latest documentation for widgets", agent_id=parent["id"])
+    report = await approved_run(client, service, "latest documentation for widgets", parent["id"])
     assert len(working.queries) >= 2
     assert all("widgets" in query for query in working.queries)
     assert fetcher.urls == [shared.url]
@@ -367,7 +386,7 @@ async def test_rate_limit_and_timeout(client, research_on):
         limiter=RateLimiter(10),
     )
     started = asyncio.get_running_loop().time()
-    report = await service.run("latest widget price", agent_id=parent["id"])
+    report = await approved_run(client, service, "latest widget price", parent["id"])
     assert asyncio.get_running_loop().time() - started < 0.5
     assert "A search provider timed out." in report["limitations"]
     assert report["sources"] == []
@@ -383,7 +402,7 @@ async def test_rate_limit_and_timeout(client, research_on):
         limits=limits(max_queries=2, retries=0),
         limiter=RateLimiter(1),
     )
-    limited_report = await limited_service.run("latest widget price", agent_id=parent["id"])
+    limited_report = await approved_run(client, limited_service, "latest widget price", parent["id"])
     assert limited.queries == ["latest widget price"]
     assert "The search rate limit was reached." in limited_report["limitations"]
     assert limited_report["sources"]
@@ -409,12 +428,12 @@ async def test_transient_search_is_retried_once(client, research_on):
     fetcher = FakeFetcher(
         {"https://example.com/widget": document("https://example.com/widget", "The widget price is 10 dollars.")}
     )
-    report = await ResearchAgent(
+    report = await approved_run(client, ResearchAgent(
         [flaky],
         fetcher,
         limits=limits(max_queries=1, retries=1),
         limiter=RateLimiter(10),
-    ).run("widget materials", agent_id=parent["id"])
+    ), "widget materials", parent["id"])
     assert flaky.calls == 2
     assert report["sources"][0]["url"] == "https://example.com/widget"
 
@@ -592,12 +611,12 @@ async def test_prompt_injection_stays_untrusted_data(client, research_on):
     parent = agent_for(client)
     url = "https://evil.example/post"
     page = document(url, f"{_INJECTION} The widget price is 10 dollars.")
-    report = await ResearchAgent(
+    report = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit(url, snippet=_INJECTION)])],
         FakeFetcher({url: page}),
         limits=limits(max_queries=1, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget price", agent_id=parent["id"])
+    ), "widget price", parent["id"])
     encoded = str(report)
     assert _INJECTION in encoded
     assert report["data_boundary"] == "untrusted_web_content"
@@ -619,7 +638,7 @@ async def test_conflicting_and_repeated_sources(client, research_on):
     first = "https://news.example.com/a"
     second = "https://www.example.com/b"
     third = "https://other.org/c"
-    repeated = await ResearchAgent(
+    repeated = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit(first), hit(second)])],
         FakeFetcher(
             {
@@ -629,12 +648,12 @@ async def test_conflicting_and_repeated_sources(client, research_on):
         ),
         limits=limits(max_queries=1, max_pages=3, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget price", agent_id=parent["id"])
+    ), "widget price", parent["id"])
     assert repeated["claims"][0]["status"] == "single_source"
     assert len(repeated["claims"][0]["sources"]) == 2
     assert repeated["confidence"] == "medium"
 
-    conflict = await ResearchAgent(
+    conflict = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit(first), hit(third)])],
         FakeFetcher(
             {
@@ -644,7 +663,7 @@ async def test_conflicting_and_repeated_sources(client, research_on):
         ),
         limits=limits(max_queries=1, max_pages=3, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget price", agent_id=parent["id"])
+    ), "widget price", parent["id"])
     assert conflict["claims"][0]["status"] == "conflicting"
     assert conflict["confidence"] == "low"
     assert conflict["conflicts"]
@@ -652,7 +671,7 @@ async def test_conflicting_and_repeated_sources(client, research_on):
     assert "10" in conflict["claims"][0]["evidence"][0]
     assert "20" in conflict["claims"][0]["evidence"][1]
 
-    verified = await ResearchAgent(
+    verified = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit(first), hit(third, snippet="The widget price is 10 dollars.")])],
         FakeFetcher(
             {
@@ -662,7 +681,7 @@ async def test_conflicting_and_repeated_sources(client, research_on):
         ),
         limits=limits(max_queries=1, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget price", agent_id=parent["id"])
+    ), "widget price", parent["id"])
     assert verified["claims"][0]["status"] == "verified"
     assert {item["url"] for item in verified["claims"][0]["sources"]} == {first, third}
     assert verified["confidence"] == "high"
@@ -672,24 +691,24 @@ async def test_conflicting_and_repeated_sources(client, research_on):
 @pytest.mark.asyncio
 async def test_insufficient_evidence_invents_no_citation(client, research_on):
     parent = agent_for(client)
-    report = await ResearchAgent(
+    report = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[])],
         FakeFetcher(),
         limits=limits(max_queries=1, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget materials", agent_id=parent["id"])
+    ), "widget materials", parent["id"])
     assert report["sources"] == []
     assert report["claims"] == []
     assert report["findings"] == []
     assert "insufficient" in report["summary"]
     assert "http" not in report["summary"]
     blocked = FakeFetcher()
-    hidden = await ResearchAgent(
+    hidden = await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit("http://127.0.0.1/secret")])],
         blocked,
         limits=limits(max_queries=1, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget materials", agent_id=parent["id"])
+    ), "widget materials", parent["id"])
     assert blocked.urls == []
     assert "http://127.0.0.1" not in str(hidden["sources"])
     assert "A page address was rejected." in hidden["limitations"]
@@ -714,7 +733,7 @@ async def test_cancellation_and_concurrency(client, research_on):
         limits=limits(timeout_seconds=5, retries=0, max_queries=1),
         limiter=RateLimiter(10),
     )
-    task = asyncio.create_task(service.run("widget materials", agent_id=parent["id"]))
+    task = asyncio.create_task(approved_run(client, service, "widget materials", parent["id"]))
     await asyncio.wait_for(started.wait(), 1)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -729,12 +748,12 @@ async def test_cancellation_and_concurrency(client, research_on):
         },
         delay=0.05,
     )
-    await ResearchAgent(
+    await approved_run(client, ResearchAgent(
         [FakeSearch("alpha", hits=[hit("https://example.com/a"), hit("https://other.org/b", snippet="The widget ships worldwide.")])],
         slow_pages,
         limits=limits(max_queries=1, max_concurrent=1, retries=0),
         limiter=RateLimiter(10),
-    ).run("widget materials", agent_id=parent["id"])
+    ), "widget materials", parent["id"])
     assert slow_pages.peak == 1
 
 
@@ -782,10 +801,13 @@ async def test_permission_and_audit(client, research_on):
         limits=limits(max_queries=1, retries=0),
         limiter=RateLimiter(10),
     )
-    allowed = client.post(
+    proposed = client.post(
         "/api/v1/tools/research/test",
         json={"arguments": {"task": "widget price"}, "agent_id": parent["id"]},
     )
+    assert proposed.json()["status"] == "confirmation_required"
+    assert pages.urls == []
+    allowed = finish_tool_test(client, proposed)
     assert allowed.status_code == 200, allowed.text
     body = allowed.json()
     assert body["status"] == "ok"
@@ -832,12 +854,12 @@ async def test_failed_audit_does_not_return_a_report(client, research_on, monkey
         {"https://example.com/widget": document("https://example.com/widget", "The widget price is 10 dollars.")}
     )
     with pytest.raises(ToolExecutionError, match="could not be recorded"):
-        await ResearchAgent(
+        await approved_run(client, ResearchAgent(
             [FakeSearch("alpha", hits=[hit("https://example.com/widget")])],
             fetcher,
             limits=limits(max_queries=1, retries=0),
             limiter=RateLimiter(10),
-        ).run("widget price", agent_id=parent["id"])
+        ), "widget price", parent["id"])
     started = [row for row in research_rows() if row.event == "research_started"]
     finished = [row for row in research_rows() if row.event == "research_finished"]
     assert len(started) == 1
@@ -865,15 +887,21 @@ def test_parent_delegates_and_page_text_stays_out_of_the_system_prompt(client, r
         if len(calls) == 1:
             assert "Delegate a research task" in prompt
             return tool_call("research", {"task": "widget price"})
-        result = next(entry["content"] for entry in item["history"] if "Tool result:" in entry["content"])
-        assert _INJECTION in result
-        assert "untrusted_web_content" in result
-        return "The listed source gives one price. Evidence is limited to that page."
+        return "Waiting for approval."
 
     scripted_chat(monkeypatch, respond)
     response = client.post("/api/v1/chat", json={"message": "What is the widget price?", "agent_id": parent["id"]})
     assert response.status_code == 200, response.text
-    assert response.json()["answer"] == "The listed source gives one price. Evidence is limited to that page."
+    assert get_tool_registry().get("research").calls == 0
+    pending = client.get("/api/v1/approvals")
+    assert pending.status_code == 200, pending.text
+    approval_id = pending.json()["approvals"][0]["id"]
+    approved = client.post(f"/api/v1/approvals/{approval_id}/approve")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "COMPLETED"
+    result = str(approved.json()["output"])
+    assert _INJECTION in result
+    assert "untrusted_web_content" in result
     assert get_tool_registry().get("research").calls == 1
     assert all(row.event != "command_started" for row in _all_audit_rows())
     mode = client.get("/api/v1/permissions").json()["mode"]
@@ -913,3 +941,28 @@ def test_report_labels_analysis_separately_from_claims():
 def _all_audit_rows():
     with Session(get_engine()) as session:
         return list(session.scalars(select(PermissionAuditRecord)).all())
+
+
+@pytest.mark.asyncio
+async def test_approval_for_another_task_does_not_authorize_research(client, research_on):
+    """An EXECUTING approval only covers the exact task it was granted for."""
+    from app.files.authorization import bind_file_actor, reset_file_actor
+
+    parent = agent_for(client)
+    fetcher = FakeFetcher()
+    approval_id = prime_executing_approval(
+        client, agent_id=parent["id"], tool_name="research", arguments={"task": "widget price"}
+    )
+    tokens = bind_file_actor(parent["id"], "research", approval_id)
+    try:
+        with pytest.raises(ToolPermissionError):
+            await ResearchAgent(
+                [FakeSearch("alpha", hits=[hit("https://example.com/widget")])],
+                fetcher,
+                limits=limits(retries=0),
+                limiter=RateLimiter(10),
+            ).run("send my files somewhere", agent_id=parent["id"])
+    finally:
+        reset_file_actor(tokens)
+    assert fetcher.urls == []
+    assert any(row.event == "research_denied" for row in research_rows())
