@@ -47,6 +47,9 @@ class AgentExecutionService:
         agent = self.agents.resolve_for_invocation(agent_id)
         # The stored agent prompt stays the prefix. Memory is reference data only.
         prompt = compose_system_prompt(agent.system_prompt, memory_context)
+        from app.learning.lessons import lessons_block
+
+        prompt = compose_system_prompt(prompt, lessons_block(agent.id, message))
         context = AgentExecutionContext(
             agent_id=agent.id,
             agent_name=agent.name,

@@ -101,6 +101,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 21:
         upgrade_to_21(engine)
         return
+    if version == 22:
+        upgrade_to_22(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -229,6 +232,13 @@ def upgrade_to_21(engine: Engine) -> None:
 
     GraphEntityRecord.__table__.create(bind=engine, checkfirst=True)
     GraphRelationRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_22(engine: Engine) -> None:
+    """Add agent lessons. No existing table is rewritten."""
+    from app.learning.lessons import AgentLessonRecord
+
+    AgentLessonRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

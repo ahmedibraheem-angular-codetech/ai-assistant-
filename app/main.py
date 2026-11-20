@@ -11,6 +11,7 @@ from app.api.routes import (
     conversations,
     graph,
     health,
+    learning,
     memories,
     permissions,
     projects,
@@ -101,3 +102,4 @@ app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recover
 app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])
 app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"])
 app.include_router(graph.router, prefix=settings.api_prefix, tags=["Knowledge graph"])
+app.include_router(learning.router, prefix=settings.api_prefix, tags=["Learning"])

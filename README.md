@@ -218,6 +218,24 @@ Names match across Arabic spelling variants. Agents use `graph_lookup` (read)
 and `graph_record` (append-only; cannot edit, delete, or overwrite your
 descriptions). Hired agents get both tools.
 
+### Agent lessons and feedback (self-learning, part 1)
+
+Agents save short lessons with `record_lesson`; related lessons are added to
+their prompt on similar tasks. Your feedback teaches them too:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/<agent>/feedback -d '{"rating":"down","comment":"Keep answers short."}'
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/agents/<agent>/lessons?status=pending"
+curl -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/lessons/<id> -d '{"status":"active"}'   # or "retired"
+```
+
+A lesson recorded in a turn that read untrusted content (web, files,
+knowledge, other agents, program output) is saved as `pending` and is not
+used until you approve it, so a malicious page cannot plant a lasting rule.
+Lessons are reference data and never change permissions.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

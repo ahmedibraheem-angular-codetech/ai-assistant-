@@ -10,6 +10,7 @@ from app.tools.registry import ToolRegistry
 from app.tools.sandbox import RunCodeTool
 from app.projects.core import ProjectBriefTool, RecordProjectEntryTool
 from app.graph.core import GraphLookupTool, GraphRecordTool
+from app.learning.lessons import RecordLessonTool
 from app.tools.web_search import DuckDuckGoSearchProvider, WebSearchTool
 
 
@@ -25,6 +26,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         RecordProjectEntryTool(),
         GraphLookupTool(),
         GraphRecordTool(),
+        RecordLessonTool(),
         *builtin_file_tools(),
         *builtin_command_tools(),
         *builtin_knowledge_tools(),

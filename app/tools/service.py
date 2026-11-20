@@ -218,9 +218,15 @@ class ToolService:
                 return _approval_outcome(call.name, pending.id)
             token = bind_request_session(self.grants.session)
             try:
-                return await self.executor.run(tool, arguments, confirmed=False, agent_id=actor)
+                outcome = await self.executor.run(tool, arguments, confirmed=False, agent_id=actor)
             finally:
                 reset_request_session(token)
+            from app.learning.lessons import TURN_UNTRUSTED, UNTRUSTED_SOURCE_TOOLS
+
+            if call.name in UNTRUSTED_SOURCE_TOOLS and outcome.status == "ok":
+                # Lessons recorded later in this turn need the user's review.
+                TURN_UNTRUSTED.set(True)
+            return outcome
         except ToolPermissionError:
             return ToolOutcome(call.name, "error", None, _DENIED)
         except ToolDisabledError:

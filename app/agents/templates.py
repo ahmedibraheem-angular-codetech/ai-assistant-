@@ -19,11 +19,12 @@ _COMMON = (
     "wants to continue earlier work, call project_brief first. At the end of a work "
     "session, save important decisions and the next step with record_project_entry. "
     "Use graph_lookup to recall people and organizations, and graph_record to save "
-    "relations the user states (who is responsible for what)."
+    "relations the user states (who is responsible for what). After a task, if you "
+    "learned something useful for next time, save it in one sentence with record_lesson."
 )
 
 
-_PROJECT_TOOLS = ("project_brief", "record_project_entry", "graph_lookup", "graph_record")
+_PROJECT_TOOLS = ("project_brief", "record_project_entry", "graph_lookup", "graph_record", "record_lesson")
 
 
 @dataclass(frozen=True)
