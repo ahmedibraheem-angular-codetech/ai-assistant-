@@ -1,0 +1,75 @@
+<aside class="sidebar">
+  <button type="button" class="new-chat" (click)="newChat()">محادثة جديدة</button>
+  <nav aria-label="المحادثات">
+    @for (conversation of conversations(); track conversation.id) {
+      <button
+        type="button"
+        class="conversation"
+        [class.active]="conversation.id === id()"
+        [attr.aria-current]="conversation.id === id() ? 'page' : null"
+        dir="auto"
+        (click)="openConversation(conversation.id)"
+      >
+        {{ conversation.title }}
+      </button>
+    } @empty {
+      <p class="muted">لا توجد محادثات بعد.</p>
+    }
+  </nav>
+  <p class="status" [class.ok]="online() === true" [class.down]="online() === false" role="status">
+    @switch (online()) {
+      @case (true) { الخادم يعمل }
+      @case (false) { الخادم متوقف }
+      @default { جارٍ الفحص… }
+    }
+  </p>
+</aside>
+
+<main class="chat">
+  <section #scroller class="lines" aria-live="polite">
+    @if (loading()) {
+      <p class="muted center">جارٍ تحميل المحادثة…</p>
+    } @else {
+      @for (line of lines(); track $index) {
+        <article class="line" [class]="line.role" [class.failed]="line.failed">
+          @if (line.pending) {
+            <p class="thinking" aria-label="المساعد يفكر"><span></span><span></span><span></span></p>
+          } @else {
+            <p class="content" dir="auto">{{ line.content }}</p>
+            @if (line.meta) {
+              <p class="meta" dir="auto">{{ line.meta }}</p>
+            }
+            @if (line.failed) {
+              <p class="meta">لم تُرسل</p>
+            }
+          }
+        </article>
+      } @empty {
+        <div class="empty">
+          <h1>كيف أساعدك اليوم؟</h1>
+          <p class="muted">اكتب رسالتك بالأسفل. Enter للإرسال، Shift+Enter لسطر جديد.</p>
+        </div>
+      }
+    }
+  </section>
+
+  @if (error()) {
+    <p class="error" role="alert" dir="auto">{{ error() }}</p>
+  }
+
+  <form class="composer" (submit)="$event.preventDefault(); send()">
+    <label for="message" class="visually-hidden">رسالتك</label>
+    <textarea
+      id="message"
+      name="message"
+      rows="3"
+      dir="auto"
+      placeholder="اكتب رسالتك…"
+      maxlength="20000"
+      [ngModel]="draft()"
+      (ngModelChange)="draft.set($event)"
+      (keydown)="onKeydown($event)"
+    ></textarea>
+    <button type="submit" [disabled]="!canSend()">{{ sending() ? 'جارٍ الإرسال…' : 'أرسل' }}</button>
+  </form>
+</main>

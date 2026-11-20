@@ -276,6 +276,39 @@ standing approval for `research`, the session leaves an approval request
 instead. Pause and budgets apply. Turn the scheduler off with
 `STUDY_SCHEDULER_ENABLED=false`.
 
+## Mac app (phase 5, in progress)
+
+`desktop/` is an Angular + Tauri 2 app. Slice 1 has the chat page
+(conversation list, history, new chat, server status). Start the server, then:
+
+```bash
+cd desktop
+npm install                      # first time only
+npx tauri dev                    # opens the window; talks to port 8000
+ASSISTANT_API_PORT=8765 npx tauri dev   # or another port
+```
+
+**The web view never sees the token.** It calls one Tauri command,
+`api_request(method, path, body)`. Rust reads `data/control_plane.token`
+again for each request (so a `rotate` works without a restart), with the same
+checks as the server: private regular file, owned by you, not a symlink or
+hard link, 43 characters. Rust then calls `http://127.0.0.1:<port>` itself.
+The host is fixed to loopback. Only `/api/v1/...` paths and the usual methods
+are allowed, and the request uses no proxy and does not follow redirects. The
+request comes from Rust, so it has no browser `Origin`. The CSP blocks the
+web view from making any network request of its own. `ASSISTANT_DATA_DIR`
+changes the token folder (default: the repo's `data/`).
+
+Tests:
+
+```bash
+cd desktop && CI=1 npx ng test --watch=false          # Angular (vitest)
+cd desktop/src-tauri && cargo test                    # token bridge
+ASSISTANT_API_PORT=8765 cargo test --test live -- --ignored --nocapture   # live, needs server + Ollama
+```
+
+The live test sends one real chat and then deletes that conversation.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is
