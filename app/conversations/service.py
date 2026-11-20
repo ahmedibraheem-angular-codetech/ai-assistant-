@@ -1,3 +1,5 @@
+import asyncio
+import weakref
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
@@ -32,6 +34,18 @@ from app.memories.models import Memory
 from app.memories.service import MemoryService
 from app.routing.schemas import RoutingDecision
 from app.routing.service import RoutingService
+
+
+_turn_locks: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]" = weakref.WeakKeyDictionary()
+
+
+def _turn_lock() -> asyncio.Lock:
+    """The chat-turn lock of the running event loop (tests start several loops)."""
+    loop = asyncio.get_running_loop()
+    lock = _turn_locks.get(loop)
+    if lock is None:
+        lock = _turn_locks[loop] = asyncio.Lock()
+    return lock
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +86,26 @@ class ConversationService:
         self.routing = routing
 
     async def send(
+        self,
+        *,
+        message: str,
+        system_prompt: str | None,
+        agent_id: str | None,
+        conversation_id: str | None,
+    ) -> ChatTurnResult:
+        """One chat turn at a time for the whole server.
+
+        A turn keeps its database transaction open while the model answers
+        (tools that write during the turn share it). SQLite allows one writer,
+        so a second turn started meanwhile failed at once with HTTP 500. Now it
+        waits, and it also sees the first turn's answer in its history.
+        """
+        async with _turn_lock():
+            return await self._send(
+                message=message, system_prompt=system_prompt, agent_id=agent_id, conversation_id=conversation_id
+            )
+
+    async def _send(
         self,
         *,
         message: str,
