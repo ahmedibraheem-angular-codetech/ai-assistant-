@@ -52,6 +52,7 @@ class PermissionFacts:
     workspace_granted: bool
     path_allowed: bool
     internet: bool
+    approval_required: bool = False
     change_granted: bool = True
 
 
@@ -104,7 +105,17 @@ def decide(facts: PermissionFacts) -> PermissionDecision:
             return _approval(facts)
         if facts.mode == "restricted_auto" and facts.internet:
             return _deny(facts, _INTERNET, "restricted")
+        # Manifest approval_required is authoritative for ask_sensitive (and
+        # any other mode that would otherwise ALLOW a read).
+        if facts.approval_required:
+            if facts.mode == "restricted_auto":
+                return _deny(facts, _RESTRICTED, "restricted")
+            return _approval(facts)
         return _allow(facts, _READ)
+    if facts.approval_required:
+        if facts.mode == "restricted_auto":
+            return _deny(facts, _RESTRICTED, "restricted")
+        return _approval(facts)
     return _allow(facts, _SAFE)
 
 

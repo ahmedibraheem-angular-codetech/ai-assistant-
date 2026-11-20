@@ -462,11 +462,16 @@ def test_web_search_api_success_failure_and_disabled(client, monkeypatch):
         async def search(self, query: str, *, limit: int, timeout: float):
             raise SearchProviderError()
 
+    from tests.approval_support import finish_tool_test
+
     search = get_tool_registry().get("web_search")
     search.provider = FailingProvider()
-    failed = client.post(
-        "/api/v1/tools/web_search/test",
-        json={"arguments": {"query": "local models"}, "agent_id": agent["id"]},
+    failed = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/web_search/test",
+            json={"arguments": {"query": "local models"}, "agent_id": agent["id"]},
+        ),
     )
     assert failed.status_code == 200
     assert failed.json()["status"] == "error"
@@ -490,9 +495,12 @@ def test_web_search_api_success_failure_and_disabled(client, monkeypatch):
             ]
 
     search.provider = FakeProvider()
-    succeeded = client.post(
-        "/api/v1/tools/web_search/test",
-        json={"arguments": {"query": "local models"}, "agent_id": agent["id"]},
+    succeeded = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/web_search/test",
+            json={"arguments": {"query": "local models"}, "agent_id": agent["id"]},
+        ),
     )
     assert succeeded.status_code == 200
     body = succeeded.json()
@@ -1192,6 +1200,306 @@ def test_worker_rejects_unknown_tools_without_running_code():
     )
     assert completed.returncode == 1
     assert json.loads(completed.stdout)["ok"] is False
+
+
+_OVERFLOW = "The tool produced too much output and was stopped."
+
+
+def _install_fake_worker(monkeypatch, script: str):
+    real = asyncio.create_subprocess_exec
+
+    async def fake(*args, **kwargs):
+        if len(args) >= 3 and args[1] == "-m" and args[2] == "app.tools.worker":
+            return await real(sys.executable, "-c", script, **{k: v for k, v in kwargs.items()})
+        return await real(*args, **kwargs)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake)
+
+
+@pytest.mark.asyncio
+async def test_stdout_overflow_fails_closed_and_reaps(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+        script = (
+            "import sys, time\n"
+            "sys.stdin.read()\n"
+            "sys.stdout.write('x' * 200)\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        _install_fake_worker(monkeypatch, script)
+        tool = BlockingMarkerTool()
+        executor = ToolExecutor()
+        outcome = await executor.run(tool, _probe_args(tmp_path / "stdout-overflow.txt", 0), confirmed=False)
+        assert outcome.status == "error"
+        assert outcome.output is None
+        assert outcome.error == _OVERFLOW
+        assert executor.reaped_workers
+        record = executor.reaped_workers[-1]
+        assert record.returncode == -signal.SIGKILL
+        assert not _alive(record.pid)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_stderr_overflow_fails_closed_and_reaps(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOOL_WORKER_STDERR_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+        script = (
+            "import sys, time\n"
+            "sys.stdin.read()\n"
+            "sys.stderr.write('e' * 200)\n"
+            "sys.stderr.flush()\n"
+            "sys.stdout.write('{\"ok\": true, \"output\": {\"wrote\": true}}')\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        _install_fake_worker(monkeypatch, script)
+        tool = BlockingMarkerTool()
+        executor = ToolExecutor()
+        outcome = await executor.run(tool, _probe_args(tmp_path / "stderr-overflow.txt", 0), confirmed=False)
+        assert outcome.status == "error"
+        assert outcome.output is None
+        assert outcome.error == _OVERFLOW
+        assert executor.reaped_workers
+        assert executor.reaped_workers[-1].returncode == -signal.SIGKILL
+        assert not _alive(executor.reaped_workers[-1].pid)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_partial_json_is_rejected(monkeypatch, tmp_path):
+    script = (
+        "import sys\n"
+        "sys.stdin.read()\n"
+        "sys.stdout.write('{\"ok\": true, \"output\":')\n"
+        "sys.stdout.flush()\n"
+    )
+    _install_fake_worker(monkeypatch, script)
+    tool = BlockingMarkerTool()
+    executor = ToolExecutor()
+    outcome = await executor.run(tool, _probe_args(tmp_path / "partial.json", 0), confirmed=False)
+    assert outcome.status == "error"
+    assert outcome.output is None
+    assert outcome.error == "The tool could not be completed."
+    assert executor.reaped_workers
+    assert not _alive(executor.reaped_workers[-1].pid)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_stdout_stderr_overflow_does_not_deadlock(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "64")
+    monkeypatch.setenv("TOOL_WORKER_STDERR_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+        script = (
+            "import sys, time\n"
+            "sys.stdin.read()\n"
+            "sys.stdout.write('o' * 200_000)\n"
+            "sys.stdout.flush()\n"
+            "sys.stderr.write('e' * 200_000)\n"
+            "sys.stderr.flush()\n"
+            "time.sleep(30)\n"
+        )
+        _install_fake_worker(monkeypatch, script)
+        tool = BlockingMarkerTool()
+        tool.timeout_seconds = 2.0
+        executor = ToolExecutor()
+        started = time.monotonic()
+        outcome = await executor.run(tool, _probe_args(tmp_path / "both-overflow.txt", 0), confirmed=False)
+        assert time.monotonic() - started < 1.5
+        assert outcome.status == "error"
+        assert outcome.output is None
+        assert outcome.error == _OVERFLOW
+        assert executor.reaped_workers
+        assert executor.reaped_workers[-1].returncode == -signal.SIGKILL
+        assert not _alive(executor.reaped_workers[-1].pid)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_overflow_before_stdin_read_is_not_timeout(monkeypatch, tmp_path):
+    """Output overflow must surface even when the worker never consumes stdin."""
+    monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+        # Write stdout first and never read stdin. A large stdin payload fills the
+        # pipe so the parent write blocks; overflow must still win over timeout.
+        script = (
+            "import sys, time\n"
+            "sys.stdout.write('x' * 200_000)\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        _install_fake_worker(monkeypatch, script)
+        tool = BlockingMarkerTool()
+        tool.timeout_seconds = 2.0
+        executor = ToolExecutor()
+        started = time.monotonic()
+        outcome = await executor.run(
+            tool,
+            {
+                "marker": str(tmp_path / "overflow-before-stdin.txt"),
+                "delay": 0,
+                "pad": "y" * 500_000,
+            },
+            confirmed=False,
+        )
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.5
+        assert outcome.status == "error"
+        assert outcome.error == _OVERFLOW
+        assert outcome.status != "timeout"
+        assert executor.reaped_workers
+        assert executor.reaped_workers[-1].returncode == -signal.SIGKILL
+        assert not _alive(executor.reaped_workers[-1].pid)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_execution_after_overflow_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+        flood = (
+            "import sys, time\n"
+            "sys.stdin.read()\n"
+            "sys.stdout.write('x' * 200)\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(30)\n"
+        )
+        real_exec = asyncio.create_subprocess_exec
+
+        async def fake_worker(*args, **kwargs):
+            if len(args) >= 3 and args[1] == "-m" and args[2] == "app.tools.worker":
+                return await real_exec(sys.executable, "-c", flood, **kwargs)
+            return await real_exec(*args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_worker)
+        tool = BlockingMarkerTool()
+        executor = ToolExecutor()
+        overflowed = await executor.run(tool, _probe_args(tmp_path / "first-overflow.txt", 0), confirmed=False)
+        assert overflowed.status == "error"
+        assert overflowed.error == _OVERFLOW
+        assert not _alive(executor.reaped_workers[-1].pid)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", real_exec)
+        monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "1048576")
+        get_settings.cache_clear()
+        marker = tmp_path / "after-overflow.txt"
+        recovered = await executor.run(tool, _probe_args(marker, 0.05), confirmed=False)
+        assert recovered.status == "ok"
+        assert recovered.output == {"wrote": True}
+        assert marker.read_text(encoding="utf-8") == "done"
+        assert not _alive(executor.reaped_workers[-1].pid)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_worker_emit_refuses_oversized_payload(monkeypatch):
+    import io
+
+    from app.tools import worker as worker_mod
+
+    monkeypatch.setenv("TOOL_WORKER_STDOUT_MAX_BYTES", "64")
+    get_settings.cache_clear()
+    try:
+
+        class FakeStdout:
+            def __init__(self) -> None:
+                self.buffer = io.BytesIO()
+
+            def flush(self) -> None:
+                return None
+
+        fake = FakeStdout()
+        monkeypatch.setattr(worker_mod.sys, "stdout", fake)
+        assert worker_mod._emit({"ok": True, "output": {"blob": "x" * 200}}) is False
+        assert fake.buffer.getvalue() == b""
+        assert worker_mod._emit({"ok": False, "kind": "failed"}) is True
+        assert fake.buffer.getvalue() == b'{"kind": "failed", "ok": false}'
+    finally:
+        get_settings.cache_clear()
+
+
+def test_worker_environment_excludes_secrets_and_keeps_runtime_keys():
+    from app.tools.executor import worker_environment
+
+    scrubbed = worker_environment(
+        {
+            "PATH": "/usr/bin:/bin",
+            "HOME": "/tmp",
+            "DATABASE_URL": "sqlite:////tmp/assistant.db",
+            "DEFAULT_TIMEZONE": "UTC",
+            "TOOL_WORKER_STDOUT_MAX_BYTES": "1048576",
+            "FILE_MAX_BYTES": "1024",
+            "FILE_SECRET": "should-not-pass",
+            "TOOL_WORKER_API_KEY": "should-not-pass-either",
+            "TOOL_DEFAULT_PASSWORD": "nope",
+            "WEB_SEARCH_BRAVE_KEY": "secret-brave-key",
+            "WEB_SEARCH_SECONDARY_KEY": "secret-secondary",
+            "APPROVAL_KEY": "secret-approval",
+            "SSH_AUTH_SOCK": "/tmp/ssh.sock",
+            "AWS_SECRET_ACCESS_KEY": "aws-secret",
+            "PYTEST_CURRENT_TEST": "tests/test_tools.py::probe",
+        }
+    )
+    assert scrubbed["PATH"] == "/usr/bin:/bin"
+    assert scrubbed["DATABASE_URL"] == "sqlite:////tmp/assistant.db"
+    assert scrubbed["TOOL_WORKER_STDOUT_MAX_BYTES"] == "1048576"
+    assert scrubbed["FILE_MAX_BYTES"] == "1024"
+    assert scrubbed["PYTEST_CURRENT_TEST"] == "tests/test_tools.py::probe"
+    assert "FILE_SECRET" not in scrubbed
+    assert "TOOL_WORKER_API_KEY" not in scrubbed
+    assert "TOOL_DEFAULT_PASSWORD" not in scrubbed
+    assert "WEB_SEARCH_BRAVE_KEY" not in scrubbed
+    assert "WEB_SEARCH_SECONDARY_KEY" not in scrubbed
+    assert "APPROVAL_KEY" not in scrubbed
+    assert "SSH_AUTH_SOCK" not in scrubbed
+    assert "AWS_SECRET_ACCESS_KEY" not in scrubbed
+    assert "should-not-pass" not in scrubbed.values()
+    assert "should-not-pass-either" not in scrubbed.values()
+
+
+@pytest.mark.asyncio
+async def test_isolated_worker_does_not_inherit_secret_environment(monkeypatch, tmp_path):
+    marker = tmp_path / "worker-env.txt"
+    monkeypatch.setenv("WEB_SEARCH_BRAVE_KEY", "secret-brave-key")
+    monkeypatch.setenv("WEB_SEARCH_SECONDARY_KEY", "secret-secondary-key")
+    monkeypatch.setenv("APPROVAL_KEY", "secret-approval-key")
+    monkeypatch.setenv("FILE_SECRET", "prefix-secret")
+    monkeypatch.setenv("TOOL_WORKER_API_KEY", "prefix-api-key")
+    script = (
+        "import os, sys\n"
+        "sys.stdin.read()\n"
+        f"open({str(marker)!r}, 'w', encoding='utf-8').write('\\n'.join("
+        "f'{key}={value}' for key, value in sorted(os.environ.items())))\n"
+        "sys.stdout.write('{\"ok\": true, \"output\": {\"wrote\": true}}')\n"
+        "sys.stdout.flush()\n"
+    )
+    _install_fake_worker(monkeypatch, script)
+    tool = BlockingMarkerTool()
+    executor = ToolExecutor()
+    outcome = await executor.run(tool, _probe_args(tmp_path / "env-probe.txt", 0), confirmed=False)
+    assert outcome.status == "ok"
+    recorded = marker.read_text(encoding="utf-8")
+    assert "WEB_SEARCH_BRAVE_KEY" not in recorded
+    assert "secret-brave-key" not in recorded
+    assert "WEB_SEARCH_SECONDARY_KEY" not in recorded
+    assert "secret-secondary-key" not in recorded
+    assert "APPROVAL_KEY" not in recorded
+    assert "secret-approval-key" not in recorded
+    assert "FILE_SECRET" not in recorded
+    assert "prefix-secret" not in recorded
+    assert "TOOL_WORKER_API_KEY" not in recorded
+    assert "prefix-api-key" not in recorded
+    assert "PATH=" in recorded
 
 
 @pytest.mark.asyncio

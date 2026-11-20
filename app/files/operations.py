@@ -154,6 +154,10 @@ def search_files(arguments: dict) -> dict:
 
 def read_file(arguments: dict) -> dict:
     root = _prepare(arguments, "read")
+    from app.files.changes import _reject_sensitive
+
+    # Same sensitive-name gate used by mutations and preview_text.
+    _reject_sensitive(relative_parts(arguments.get("relative_path")))
     settings = get_settings()
     descriptor, info, relative = open_file(root, arguments.get("relative_path"))
     try:

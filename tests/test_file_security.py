@@ -83,9 +83,24 @@ def test_mutations_are_refused_even_with_a_workspace_grant(client, tmp_path):
         for action in ("write", "modify", "delete"):
             with pytest.raises(FileAccessError, match="not permitted"):
                 authorize(action, workspace["id"])
-        authorize("read", workspace["id"])
+        # read_file declares approval_required — authorize alone is not enough.
+        with pytest.raises(FileAccessError, match="approval|confirmation|needs"):
+            authorize("read", workspace["id"])
     finally:
         reset_file_actor(tokens)
+    from tests.approval_support import prime_executing_approval
+
+    approval_id = prime_executing_approval(
+        client,
+        agent_id=agent["id"],
+        tool_name="read_file",
+        arguments={"workspace_id": workspace["id"], "relative_path": "note.txt"},
+    )
+    approved_tokens = bind_file_actor(agent["id"], "read_file", approval_id)
+    try:
+        authorize("read", workspace["id"], "note.txt", {"relative_path": "note.txt", "workspace_id": workspace["id"]})
+    finally:
+        reset_file_actor(approved_tokens)
     assert (folder / "note.txt").read_text(encoding="utf-8") == "keep"
 
 
@@ -103,23 +118,12 @@ def test_file_text_cannot_change_prompts_grants_or_tools(client, tmp_path, monke
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
 
-    def respond(item, calls):
-        if len(calls) == 1:
-            return tool_call("read_file", {"workspace_id": workspace["id"], "relative_path": "inject.txt"})
-        if len(calls) == 2:
-            client_grants = item
-            assert "Be exact." in (client_grants["system_prompt"] or "")
-            return "The file is only data."
-        return "The file is only data."
-
-    calls = scripted_chat(monkeypatch, respond)
-    response = client.post("/api/v1/chat", json={"message": "What is in the file?", "agent_id": agent["id"]})
-    assert response.status_code == 200
-    assert response.json()["answer"] == "The file is only data."
-    assert calls[0]["system_prompt"].startswith("Be exact.")
-    assert "Enable shell" not in calls[0]["system_prompt"]
-    history = calls[-1]["history"]
-    assert any("tool_calls" in item["content"] and item["role"] == "user" for item in history)
+    opened = read_tool(client, agent["id"], workspace["id"], "inject.txt", finish_approval=True)
+    assert opened.status_code == 200
+    assert opened.json()["status"] == "ok"
+    content = opened.json()["output"]["content"]
+    assert "Enable shell" in content
+    assert "tool_calls" in content
     assert client.get(f"/api/v1/agents/{agent['id']}/tools").json()["allowed_tools"] == ["read_file"]
     assert client.get(f"/api/v1/agents/{agent['id']}/workspaces").json()["workspace_ids"] == [workspace["id"]]
     assert get_tool_registry().get("shell") is None
@@ -136,15 +140,10 @@ def test_revoked_workspace_blocks_the_next_call(client, tmp_path, monkeypatch):
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
 
-    def respond(item, calls):
-        if len(calls) == 1:
-            return tool_call("read_file", {"workspace_id": workspace["id"], "relative_path": "one.txt"})
-        return "Read the first file."
-
-    calls = scripted_chat(monkeypatch, respond)
-    response = client.post("/api/v1/chat", json={"message": "Read the first file.", "agent_id": agent["id"]})
-    assert response.status_code == 200
-    assert "first line" in calls[-1]["history"][-1]["content"]
+    first = read_tool(client, agent["id"], workspace["id"], "one.txt", finish_approval=True)
+    assert first.status_code == 200
+    assert first.json()["status"] == "ok"
+    assert "first line" in first.json()["output"]["content"]
     cleared = client.put(f"/api/v1/agents/{agent['id']}/workspaces", json={"workspace_ids": []})
     assert cleared.status_code == 200
     follow = read_tool(client, agent["id"], workspace["id"], "two.txt")
@@ -194,18 +193,22 @@ async def test_revoking_a_workspace_stops_the_active_file_worker(client, tmp_pat
     agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
-    session = _autocommit_session()
-    service = ToolService(
-        get_tool_registry(),
-        AgentToolGrantRepository(session),
-        AgentService(AgentRepository(session)),
-        workspace_grants=AgentWorkspaceGrantRepository(session),
+    from app.tools.executor import ToolExecutor
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"], "relative_path": "note.txt"}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
     )
+    tool = get_tool_registry().get("read_file")
+    executor = ToolExecutor()
     task = asyncio.create_task(
-        service.test(
-            "read_file",
-            {"workspace_id": workspace["id"], "relative_path": "note.txt"},
-            agent["id"],
+        executor.run(
+            tool,
+            args,
+            confirmed=False,
+            agent_id=agent["id"],
+            approval_id=approval_id,
         )
     )
     try:
@@ -215,12 +218,11 @@ async def test_revoking_a_workspace_stops_the_active_file_worker(client, tmp_pat
     finally:
         if not task.done():
             task.cancel()
-        session.close()
     assert killed
     assert outcome.status == "error"
     assert outcome.output is None
     assert _SECRET not in (outcome.error or "")
-    record = service.executor.reaped_workers[-1]
+    record = executor.reaped_workers[-1]
     assert record.returncode == -signal.SIGKILL
     assert not _alive(record.pid)
     client.put(f"/api/v1/agents/{agent['id']}/workspaces", json={"workspace_ids": []})
@@ -238,23 +240,28 @@ async def test_revoked_worker_does_not_read_when_it_is_not_killed(client, tmp_pa
     agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
-    session = _autocommit_session()
-    service = ToolService(
-        get_tool_registry(),
-        AgentToolGrantRepository(session),
-        AgentService(AgentRepository(session)),
-        workspace_grants=AgentWorkspaceGrantRepository(session),
+    from app.tools.executor import ToolExecutor
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"], "relative_path": "note.txt"}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
     )
+    session = _autocommit_session()
+    tool = get_tool_registry().get("read_file")
+    executor = ToolExecutor()
 
     async def revoke_during_pause() -> None:
         await asyncio.sleep(0.05)
         AgentWorkspaceGrantRepository(session).replace(agent["id"], [])
 
     revoke = asyncio.create_task(revoke_during_pause())
-    outcome = await service.test(
-        "read_file",
-        {"workspace_id": workspace["id"], "relative_path": "note.txt"},
-        agent["id"],
+    outcome = await executor.run(
+        tool,
+        args,
+        confirmed=False,
+        agent_id=agent["id"],
+        approval_id=approval_id,
     )
     await revoke
     session.close()
@@ -333,20 +340,30 @@ async def test_worker_limit_and_memory_budget(client, tmp_path, monkeypatch):
     get_settings.cache_clear()
     tool = get_tool_registry().get("read_file")
     from app.tools.executor import ToolExecutor
+    from tests.approval_support import prime_executing_approval
 
+    args = {"workspace_id": workspace["id"], "relative_path": "small.txt"}
+    first_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
+    )
+    second_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
+    )
     executor = ToolExecutor()
     first, second = await asyncio.gather(
         executor.run(
             tool,
-            {"workspace_id": workspace["id"], "relative_path": "small.txt"},
+            args,
             confirmed=False,
             agent_id=agent["id"],
+            approval_id=first_approval,
         ),
         executor.run(
             tool,
-            {"workspace_id": workspace["id"], "relative_path": "small.txt"},
+            args,
             confirmed=False,
             agent_id=agent["id"],
+            approval_id=second_approval,
         ),
     )
     statuses = {first.status, second.status}
@@ -355,11 +372,86 @@ async def test_worker_limit_and_memory_budget(client, tmp_path, monkeypatch):
     assert errors == ["Too many tools are running. Wait and try again."]
     assert all(not _alive(record.pid) for record in executor.reaped_workers)
     monkeypatch.setenv("ASSISTANT_FILE_TEST_DELAY_SECONDS", "0")
+    follow_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
+    )
     follow = await executor.run(
         tool,
-        {"workspace_id": workspace["id"], "relative_path": "small.txt"},
+        args,
         confirmed=False,
         agent_id=agent["id"],
+        approval_id=follow_approval,
     )
     assert follow.status == "ok"
     assert follow.output["content"] == "tiny"
+
+
+def test_read_file_rejects_sensitive_names_and_keeps_normal_reads(client, tmp_path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / "notes.txt").write_text("hello", encoding="utf-8")
+    (folder / ".env").write_text("TOKEN=secret-env\n", encoding="utf-8")
+    (folder / ".env.local").write_text("TOKEN=local-secret\n", encoding="utf-8")
+    nested = folder / "config"
+    nested.mkdir()
+    (nested / ".env").write_text("TOKEN=nested-secret\n", encoding="utf-8")
+    (folder / "secrets.json").write_text('{"token":"json-secret"}', encoding="utf-8")
+    (folder / "id_rsa").write_text("PRIVATE KEY", encoding="utf-8")
+    (folder / "tls.pem").write_text("PEM", encoding="utf-8")
+    workspace = register(client, folder)
+    agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
+    grant(client, agent["id"], ["read_file"])
+    grant_workspace(client, agent["id"], workspace["id"])
+
+    for relative in (
+        ".env",
+        ".ENV",
+        ".env.local",
+        "config/.env",
+        "secrets.json",
+        "id_rsa",
+        "tls.pem",
+    ):
+        denied = read_tool(client, agent["id"], workspace["id"], relative)
+        assert denied.status_code == 200, relative
+        body = denied.json()
+        assert body["status"] == "error", relative
+        assert body.get("output") is None, relative
+        assert "protected" in str(body.get("error", "")).casefold(), relative
+        assert "TOKEN=" not in denied.text
+        assert "PRIVATE KEY" not in denied.text
+        assert "json-secret" not in denied.text
+
+    allowed = read_tool(client, agent["id"], workspace["id"], "notes.txt")
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "ok"
+    assert allowed.json()["output"]["content"] == "hello"
+
+
+def test_read_file_does_not_follow_symlink_to_sensitive_target(client, tmp_path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / ".env").write_text("TOKEN=via-symlink\n", encoding="utf-8")
+    (folder / "innocent.txt").symlink_to(folder / ".env")
+    nested = folder / "nested"
+    nested.mkdir()
+    (nested / "link.txt").symlink_to(folder / ".env")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / ".env").write_text("TOKEN=via-dir-symlink\n", encoding="utf-8")
+    (folder / "portal").symlink_to(outside, target_is_directory=True)
+    workspace = register(client, folder)
+    agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
+    grant(client, agent["id"], ["read_file"])
+    grant_workspace(client, agent["id"], workspace["id"])
+
+    for relative in ("innocent.txt", "nested/link.txt", "portal/.env"):
+        denied = read_tool(client, agent["id"], workspace["id"], relative)
+        assert denied.status_code == 200, relative
+        body = denied.json()
+        assert body["status"] == "error", relative
+        assert body.get("output") is None, relative
+        assert "TOKEN=via-symlink" not in denied.text
+        assert "TOKEN=via-dir-symlink" not in denied.text
+        error = str(body.get("error", "")).casefold()
+        assert "symlink" in error or "protected" in error or "not found" in error or "not a file" in error or "not a directory" in error, relative

@@ -433,3 +433,219 @@ def test_trusted_parents_rejects_paths_deeper_than_supported_limit(monkeypatch):
         _trusted_parents("/start/leaf")
     assert caught.value.code == "executable"
     assert depth == 64
+
+
+def test_release_failed_linux_child_attaches_unreaped_when_kill_and_reap_false(monkeypatch):
+    facts = ExecutableFacts(1, 2, "abc", "/usr/bin/true")
+    closed: list[int] = []
+    monkeypatch.setattr(process_module, "_kill_and_reap", lambda _pid: False)
+    monkeypatch.setattr(process_module, "_close_many", lambda fds: closed.extend(fds))
+    error = process_module._release_failed_linux_child(
+        424242,
+        facts,
+        9,
+        [11, 12, 13],
+        errno_value=errno.ENOEXEC,
+    )
+    assert error.code == "spawn_failed"
+    assert error.errno_value == errno.ENOEXEC
+    assert error.unreaped is not None
+    assert error.unreaped.pid == 424242
+    assert error.unreaped.pgid == 424242
+    assert error.unreaped.generation == 9
+    assert error.unreaped.facts is facts
+    assert error.unreaped.reaped is False
+    assert error.unreaped.stdin_fd == -1
+    assert error.unreaped.stdout_fd == -1
+    assert error.unreaped.stderr_fd == -1
+    assert closed == [11, 12, 13]
+
+
+def test_release_failed_linux_child_omits_unreaped_when_reaped(monkeypatch):
+    facts = ExecutableFacts(1, 2, "abc", "/usr/bin/true")
+    monkeypatch.setattr(process_module, "_kill_and_reap", lambda _pid: True)
+    monkeypatch.setattr(process_module, "_close_many", lambda _fds: None)
+    error = process_module._release_failed_linux_child(7, facts, 1, [1, 2], errno_value=1)
+    assert error.unreaped is None
+    assert error.code == "spawn_failed"
+
+
+def test_spawn_linux_failure_path_surfaces_unreaped_handle(monkeypatch):
+    """Deterministic `_spawn_linux` failure when `_kill_and_reap` returns False."""
+    facts = ExecutableFacts(1, 2, "abc", "/usr/bin/true")
+
+    class Plan:
+        argv = ("/usr/bin/true",)
+        env = ()
+        path = "/usr/bin/true"
+
+    monkeypatch.setattr(process_module, "execveat_syscall_number", lambda: 281)
+    monkeypatch.setattr(process_module, "_cstring_array", lambda values: values)
+    monkeypatch.setattr(process_module, "_bind_syscall", lambda: object())
+    monkeypatch.setattr(os, "fork", lambda: 515151)
+    monkeypatch.setattr(process_module, "_confirm_linux_exec", lambda *_a, **_k: ("failure", errno.ENOEXEC))
+    monkeypatch.setattr(process_module, "_kill_and_reap", lambda _pid: False)
+
+    with pytest.raises(ProcessError) as caught:
+        process_module._spawn_linux(Plan(), facts, 3, descriptor=99)
+    assert caught.value.unreaped is not None
+    assert caught.value.unreaped.pid == 515151
+    assert caught.value.unreaped.reaped is False
+    assert caught.value.unreaped.stdout_fd == -1
+    assert caught.value.errno_value == errno.ENOEXEC
+
+
+def test_spawn_linux_confirm_process_error_reaped_propagates_without_self_cause(monkeypatch):
+    """Reaped cleanup must re-raise the original ProcessError, never ``raise exc from exc``."""
+    facts = ExecutableFacts(1, 2, "abc", "/usr/bin/true")
+    original = ProcessError("spawn_failed", errno_value=errno.EIO)
+
+    class Plan:
+        argv = ("/usr/bin/true",)
+        env = ()
+        path = "/usr/bin/true"
+
+    def boom(*_a, **_k):
+        raise original
+
+    monkeypatch.setattr(process_module, "execveat_syscall_number", lambda: 281)
+    monkeypatch.setattr(process_module, "_cstring_array", lambda values: values)
+    monkeypatch.setattr(process_module, "_bind_syscall", lambda: object())
+    monkeypatch.setattr(os, "fork", lambda: 616161)
+    monkeypatch.setattr(process_module, "_confirm_linux_exec", boom)
+    monkeypatch.setattr(process_module, "_kill_and_reap", lambda _pid: True)
+
+    with pytest.raises(ProcessError) as caught:
+        process_module._spawn_linux(Plan(), facts, 4, descriptor=99)
+    assert caught.value is original
+    assert caught.value.code == "spawn_failed"
+    assert caught.value.errno_value == errno.EIO
+    assert caught.value.unreaped is None
+    assert caught.value.__cause__ is None
+
+
+def test_reap_deadline_retains_stdout_and_stderr(monkeypatch):
+    stdin_r, stdin_w = os.pipe()
+    stdout_r, stdout_w = os.pipe()
+    stderr_r, stderr_w = os.pipe()
+    child = ChildProcess(
+        pid=606060,
+        pgid=606060,
+        stdin_fd=stdin_w,
+        stdout_fd=stdout_r,
+        stderr_fd=stderr_r,
+        facts=ExecutableFacts(1, 2, "abc", "/usr/bin/true"),
+        generation=1,
+    )
+    monkeypatch.setattr(os, "waitpid", lambda *_a, **_k: (0, 0))
+    assert child.reap(wait_seconds=0.02) is False
+    assert child.reaped is False
+    assert child.stdin_fd == stdin_w
+    assert child.stdout_fd == stdout_r
+    assert child.stderr_fd == stderr_r
+    # Confirmed reap still releases parent ends.
+    child.reaped = True
+    assert child.reap(wait_seconds=0) is True
+    assert child.stdin_fd == -1
+    assert child.stdout_fd == -1
+    assert child.stderr_fd == -1
+    for descriptor in (stdin_r, stdout_w, stderr_w):
+        os.close(descriptor)
+
+
+def test_release_failed_linux_child_closes_fds_when_kill_and_reap_raises(monkeypatch):
+    """Unexpected kill/reap failure still closes FDs and surfaces adoptable unreaped."""
+    facts = ExecutableFacts(1, 2, "abc", "/usr/bin/true")
+    closed: list[int] = []
+
+    def boom(_pid):
+        raise RuntimeError("kill/reap exploded")
+
+    monkeypatch.setattr(process_module, "_kill_and_reap", boom)
+    monkeypatch.setattr(process_module, "_close_many", lambda fds: closed.extend(fds))
+    with pytest.raises(ProcessError) as caught:
+        process_module._release_failed_linux_child(99, facts, 2, [21, 22, 23])
+    assert caught.value.code == "spawn_failed"
+    assert caught.value.unreaped is not None
+    assert caught.value.unreaped.pid == 99
+    assert caught.value.unreaped.pgid == 99
+    assert caught.value.unreaped.generation == 2
+    assert caught.value.unreaped.facts is facts
+    assert caught.value.unreaped.stdin_fd == -1
+    assert caught.value.unreaped.stdout_fd == -1
+    assert caught.value.unreaped.stderr_fd == -1
+    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert "kill/reap exploded" in str(caught.value.__cause__)
+    assert closed == [21, 22, 23]
+
+
+def test_reap_failed_child_retries_interrupted_then_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    def waitpid(_pid, _flags):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise InterruptedError()
+        return (123, 0)
+
+    monkeypatch.setattr(os, "waitpid", waitpid)
+    monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
+    assert process_module._reap_failed_child(123, wait_seconds=1.0) is True
+    assert calls["n"] == 2
+
+
+def test_reap_failed_child_retries_eintr_then_succeeds(monkeypatch):
+    calls = {"n": 0}
+
+    def waitpid(_pid, _flags):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError(errno.EINTR, "Interrupted system call")
+        return (123, 0)
+
+    monkeypatch.setattr(os, "waitpid", waitpid)
+    monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
+    assert process_module._reap_failed_child(123, wait_seconds=1.0) is True
+    assert calls["n"] == 2
+
+
+def test_reap_failed_child_interrupted_past_deadline_returns_false(monkeypatch):
+    clock = {"t": 100.0}
+
+    def mono():
+        return clock["t"]
+
+    def waitpid(_pid, _flags):
+        clock["t"] += 0.5
+        raise InterruptedError()
+
+    monkeypatch.setattr(time, "monotonic", mono)
+    monkeypatch.setattr(os, "waitpid", waitpid)
+    monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
+    assert process_module._reap_failed_child(55, wait_seconds=0.2) is False
+
+
+def test_reap_failed_child_treats_echild_as_reaped(monkeypatch):
+    def waitpid(_pid, _flags):
+        raise OSError(errno.ECHILD, "No child processes")
+
+    monkeypatch.setattr(os, "waitpid", waitpid)
+    assert process_module._reap_failed_child(77, wait_seconds=0.1) is True
+
+
+def test_release_failed_linux_child_preserves_unreaped_pid_when_not_reaped(monkeypatch):
+    facts = ExecutableFacts(9, 8, "digest", "/usr/bin/true")
+    monkeypatch.setattr(process_module, "_kill_and_reap", lambda _pid: False)
+    monkeypatch.setattr(process_module, "_close_many", lambda _fds: None)
+    error = process_module._release_failed_linux_child(
+        31337,
+        facts,
+        4,
+        [1],
+        errno_value=errno.ENOEXEC,
+    )
+    assert error.unreaped is not None
+    assert error.unreaped.pid == 31337
+    assert error.unreaped.pgid == 31337
+    assert error.unreaped.generation == 4
+    assert error.unreaped.facts is facts

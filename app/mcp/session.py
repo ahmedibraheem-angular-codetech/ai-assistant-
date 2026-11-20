@@ -27,10 +27,13 @@ and resource methods before any byte is written.
 Lifecycle ownership: every launched child stays reachable until confirmed
 reaped. Ready sessions live in `_sessions`. Sessions whose children are not
 yet reaped live in `_stopping` after they leave `_sessions`. Failed startups
-that launched a child use the same `_stopping` path via `_abandon`. At most
-one cleanup owner runs per session (`_closing`); retries are bounded and
-cannot overlap. `open_session` never launches a second child for a server
-identity while that identity remains in `_stopping`.
+that launched a child use the same `_stopping` path via `_abandon`. Linux
+spawn failures that cannot confirm reap attach a signal/reap-only handle on
+`ProcessError.unreaped`; `_bring_up` adopts it before `_abandon` so accounting
+and admission stay honest. At most one cleanup owner runs per session
+(`_closing`); retries are bounded and cannot overlap. `open_session` never
+launches a second child for a server identity while that identity remains in
+`_stopping`.
 """
 
 from __future__ import annotations
@@ -483,38 +486,54 @@ def close_session(session: McpSession) -> None:
             _notify_generation(session.server_id, session.generation)
 
 
+def _inflight_drain_seconds() -> float:
+    """Bounded wait for an in-flight open_session owner to finish or fail."""
+    return _timing.initialize_seconds + (2 * (_timing.stdin_grace + _timing.term_grace)) + 5
+
+
+def _snapshot_tracked_sessions_locked() -> list[McpSession]:
+    """Deduped `_sessions` then `_stopping`. Caller holds `_registry`."""
+    pending: list[McpSession] = []
+    seen: set[int] = set()
+    for session in list(_sessions.values()) + list(_stopping.values()):
+        identity = id(session)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        pending.append(session)
+    return pending
+
+
 def shutdown_all() -> None:
     """Refuse new sessions and reap every tracked child this process started.
 
-    Snapshots `_sessions` and `_stopping` under the registry lock, then runs
-    bounded close attempts. Unreaped children remain in `_stopping` and are
-    reported explicitly; shutdown never claims they were cleaned up.
+    Waits for known `_inflight` owners (bounded), closes `_sessions` and
+    `_stopping`, then drains any still-inflight startup once more before a
+    final close pass. Unreaped children remain in `_stopping` and lingering
+    inflight owners are reported explicitly; shutdown never claims they were
+    cleaned up.
     """
     global _accepting
     with _registry:
         _accepting = False
         inflight = list(_inflight.values())
     for reservation in inflight:
-        reservation.event.wait(
-            timeout=_timing.initialize_seconds + (2 * (_timing.stdin_grace + _timing.term_grace)) + 5
-        )
-    pending: list[McpSession] = []
-    seen: set[int] = set()
+        reservation.event.wait(timeout=_inflight_drain_seconds())
     with _registry:
-        for session in list(_sessions.values()) + list(_stopping.values()):
-            identity = id(session)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            pending.append(session)
+        pending = _snapshot_tracked_sessions_locked()
     for session in pending:
         try:
             close_session(session)
         except Exception:
             logger.warning("The MCP session shutdown failed.")
-    # Close may have moved sessions into `_stopping` after the first snapshot.
+    # Startups that outlived the first wait may still hold a launched child.
+    # One more bounded drain, then close whatever they published to stopping.
     with _registry:
-        remaining = list(_stopping.values())
+        late_inflight = list(_inflight.values())
+    for reservation in late_inflight:
+        reservation.event.wait(timeout=_inflight_drain_seconds())
+    with _registry:
+        remaining = _snapshot_tracked_sessions_locked()
     for session in remaining:
         try:
             close_session(session)
@@ -522,12 +541,19 @@ def shutdown_all() -> None:
             logger.warning("The MCP session shutdown failed.")
     with _registry:
         unresolved = list(_stopping.values())
+        lingering_inflight = [(server_id, reservation) for server_id, reservation in _inflight.items()]
     for session in unresolved:
         logger.warning(
             "MCP unreaped child remains after shutdown_all server_id=%s generation=%s state=%s",
             session.server_id,
             session.generation,
             session.state,
+        )
+    for server_id, reservation in lingering_inflight:
+        logger.warning(
+            "MCP inflight startup remains after shutdown_all server_id=%s generation=%s",
+            server_id,
+            reservation.generation,
         )
 
 
@@ -784,7 +810,17 @@ def _bring_up(server, revision: str, epoch: int, generation: int) -> McpSession:
                 raise SessionError("shutting_down")
             _sessions[server.id] = session
         return session
-    except Exception:
+    except Exception as exc:
+        # Linux failed-spawn may attach a signal/reap-only handle when kill/reap
+        # could not confirm exit. Adopt it before abandon so the pid stays in
+        # `_stopping` and blocks a new generation for this server identity.
+        if (
+            session.child is None
+            and isinstance(exc, ProcessError)
+            and exc.unreaped is not None
+        ):
+            session.child = exc.unreaped
+            session.facts = exc.unreaped.facts
         if session.reader is not None:
             close_session(session)
         else:

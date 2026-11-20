@@ -37,9 +37,67 @@ logger = logging.getLogger(__name__)
 _TIMEOUT = "The tool took too long and was stopped."
 _CONFIRMATION = "This tool needs confirmation before it can run."
 _FAILED = "The tool could not be completed."
+_OVERFLOW = "The tool produced too much output and was stopped."
 _UNISOLATED = "This tool cannot be isolated, so it was not run."
 _BUSY = "Too many tools are running. Wait and try again."
 _ROOT = Path(__file__).resolve().parents[2]
+_STREAM_CHUNK = 8_192
+# Exact allowlist only — no prefix matching (avoids FILE_SECRET / TOOL_WORKER_API_KEY).
+# DATABASE_URL is intentional: the worker resolves workspaces through SQLAlchemy.
+# Pytest overrides this to a temp DB; production may also set it instead of .env.
+# Settings can still load other non-listed values from the project .env via cwd.
+_WORKER_ENV_KEYS = frozenset(
+    {
+        "PATH",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "TZ",
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "VIRTUAL_ENV",
+        "DATABASE_URL",
+        "DEFAULT_TIMEZONE",
+        "FILE_MAX_BYTES",
+        "FILE_MAX_OUTPUT_CHARS",
+        "FILE_LIST_LIMIT",
+        "FILE_SEARCH_LIMIT",
+        "FILE_SEARCH_SCAN_LIMIT",
+        "FILE_PROJECT_DEPTH",
+        "FILE_SPREADSHEET_MAX_ROWS",
+        "FILE_SPREADSHEET_MAX_COLUMNS",
+        "FILE_JSON_MAX_DEPTH",
+        "FILE_MAX_MEMORY_BYTES",
+        "FILE_MAX_CONCURRENT_WORKERS",
+        "FILE_WORKER_CPU_SECONDS",
+        "FILE_SEARCH_SNIPPET_CHARS",
+        "FILE_ZIP_MAX_UNCOMPRESSED_BYTES",
+        "FILE_ZIP_MAX_MEMBER_BYTES",
+        "FILE_ZIP_MAX_FILES",
+        "FILE_ZIP_MAX_RATIO",
+        "FILE_ZIP_MAX_DEPTH",
+        "FILE_ZIP_MAX_SECONDS",
+        "FILE_WRITE_MAX_BYTES",
+        "FILE_DELETE_BATCH_LIMIT",
+        "FILE_BACKUP_MAX_BYTES",
+        "FILE_BACKUP_MAX_COUNT",
+        "TOOL_WORKER_STDOUT_MAX_BYTES",
+        "TOOL_WORKER_STDERR_MAX_BYTES",
+        "PYTEST_CURRENT_TEST",
+        "ASSISTANT_FILE_TEST_DELAY_SECONDS",
+        "ASSISTANT_FILE_TEST_STARTED_FILE",
+        # Test-only crash injection; journal.crash_point also requires PYTEST_CURRENT_TEST.
+        "ASSISTANT_FILE_JOURNAL_CRASH",
+    }
+)
+
+
+class _StreamOverflow(Exception):
+    """A worker pipe exceeded its configured byte limit."""
 
 
 class WorkerRecord:
@@ -174,6 +232,9 @@ class ToolExecutor:
 
             body.update(controller.payload())
         payload = json.dumps(body).encode()
+        settings = get_settings()
+        stdout_max = settings.tool_worker_stdout_max_bytes
+        stderr_max = settings.tool_worker_stderr_max_bytes
         try:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
@@ -183,6 +244,7 @@ class ToolExecutor:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(_ROOT),
+                env=worker_environment(),
                 start_new_session=True,
             )
         except OSError:
@@ -196,26 +258,34 @@ class ToolExecutor:
             workspace_id=workspace_id if isinstance(workspace_id, str) else None,
         )
         try:
-            stdout, _stderr = await asyncio.wait_for(proc.communicate(payload), timeout)
-        except TimeoutError:
-            await self._reap(proc, kill=True)
-            _reconcile_commands(tool.name)
-            return ToolOutcome(tool.name, "timeout", None, _TIMEOUT)
-        except asyncio.CancelledError:
-            current = asyncio.current_task()
-            if current is not None:
-                current.uncancel()
             try:
+                stdout = await asyncio.wait_for(
+                    _bounded_communicate(proc, payload, stdout_max, stderr_max),
+                    timeout,
+                )
+            except _StreamOverflow:
                 await self._reap(proc, kill=True)
+                _reconcile_commands(tool.name)
+                return ToolOutcome(tool.name, "error", None, _OVERFLOW)
+            except TimeoutError:
+                await self._reap(proc, kill=True)
+                _reconcile_commands(tool.name)
+                return ToolOutcome(tool.name, "timeout", None, _TIMEOUT)
+            except asyncio.CancelledError:
+                current = asyncio.current_task()
+                if current is not None:
+                    current.uncancel()
+                try:
+                    await self._reap(proc, kill=True)
+                except Exception:
+                    logger.exception("Tool %s worker was not reaped after cancellation", tool.name)
+                _reconcile_commands(tool.name)
+                raise
             except Exception:
-                logger.exception("Tool %s worker was not reaped after cancellation", tool.name)
-            _reconcile_commands(tool.name)
-            raise
-        except Exception:
-            logger.exception("Tool %s failed", tool.name)
-            await self._reap(proc, kill=True)
-            _reconcile_commands(tool.name)
-            return ToolOutcome(tool.name, "error", None, _FAILED)
+                logger.exception("Tool %s failed", tool.name)
+                await self._reap(proc, kill=True)
+                _reconcile_commands(tool.name)
+                return ToolOutcome(tool.name, "error", None, _FAILED)
         finally:
             release_worker_slot(slot)
         self._remember(proc)
@@ -251,6 +321,23 @@ def _timeout_seconds(tool: Tool) -> float:
     return tool.timeout_seconds
 
 
+def worker_environment(source: dict[str, str] | None = None) -> dict[str, str]:
+    """Build the scrubbed environment passed to an isolated tool worker.
+
+    Only exact keys in ``_WORKER_ENV_KEYS`` are copied. Prefix wildcards are
+    intentionally not used so ad-hoc secrets cannot ride along.
+    """
+    parent = os.environ if source is None else source
+    env: dict[str, str] = {}
+    for key, value in parent.items():
+        if key in _WORKER_ENV_KEYS:
+            env[key] = value
+    env.setdefault("PATH", "/usr/bin:/bin")
+    if "LC_ALL" not in env and "LANG" in env:
+        env["LC_ALL"] = env["LANG"]
+    return env
+
+
 def _can_isolate(tool: Tool) -> bool:
     key = getattr(tool, "isolation_key", None)
     return os.name == "posix" and isinstance(key, str) and key in ALLOWED_TOOLS
@@ -263,6 +350,86 @@ def _kill_group(proc: asyncio.subprocess.Process) -> None:
         return
     except PermissionError:
         proc.kill()
+
+
+async def _bounded_communicate(
+    proc: asyncio.subprocess.Process,
+    payload: bytes,
+    stdout_max: int,
+    stderr_max: int,
+) -> bytes:
+    """Feed stdin and drain stdout/stderr concurrently under byte caps.
+
+    Raises ``_StreamOverflow`` if either pipe exceeds its limit. Collected
+    bytes past the limit are discarded; callers must kill and reap the worker
+    and must not parse the rejected stream as a successful result.
+    """
+    if proc.stdin is None or proc.stdout is None or proc.stderr is None:
+        raise RuntimeError("worker pipes are missing")
+
+    async def feed_stdin() -> None:
+        assert proc.stdin is not None
+        try:
+            proc.stdin.write(payload)
+            await proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            return
+        finally:
+            try:
+                if not proc.stdin.is_closing():
+                    proc.stdin.close()
+                await proc.stdin.wait_closed()
+            except (BrokenPipeError, ConnectionResetError, AssertionError, OSError):
+                pass
+
+    stdin_task = asyncio.create_task(feed_stdin())
+    stdout_task = asyncio.create_task(_read_limited(proc.stdout, stdout_max))
+    stderr_task = asyncio.create_task(_read_limited(proc.stderr, stderr_max))
+    tasks = (stdin_task, stdout_task, stderr_task)
+
+    async def _abort_tasks(*, kill: bool) -> None:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        # Unblock a stdin write that is stuck because the worker never read.
+        # _run_isolated still calls _reap(kill=True) for wait/remember.
+        if kill and proc.returncode is None:
+            _kill_group(proc)
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    try:
+        # Await all three together so an output overflow surfaces immediately,
+        # even if stdin is blocked because the worker has not consumed it yet.
+        _stdin_done, stdout, _stderr = await asyncio.gather(
+            stdin_task,
+            stdout_task,
+            stderr_task,
+        )
+    except _StreamOverflow:
+        await _abort_tasks(kill=True)
+        raise
+    except asyncio.CancelledError:
+        await _abort_tasks(kill=True)
+        raise
+    except Exception:
+        await _abort_tasks(kill=True)
+        raise
+    if proc.returncode is None:
+        await proc.wait()
+    return stdout
+
+
+async def _read_limited(stream: asyncio.StreamReader, limit: int) -> bytes:
+    """Read until EOF. Raise ``_StreamOverflow`` if more than ``limit`` bytes arrive."""
+    buf = bytearray()
+    while True:
+        remaining = limit - len(buf)
+        chunk = await stream.read(_STREAM_CHUNK if remaining >= _STREAM_CHUNK else remaining + 1)
+        if not chunk:
+            return bytes(buf)
+        buf.extend(chunk)
+        if len(buf) > limit:
+            raise _StreamOverflow
 
 
 def _outcome_from_worker(tool_name: str, returncode: int | None, stdout: bytes) -> ToolOutcome:

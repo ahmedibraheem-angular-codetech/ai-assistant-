@@ -15,6 +15,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from app.core.config import get_settings
 from app.tools.base import BLOCKING_READ_ONLY, SIDE_EFFECT, Tool
 from app.tools.exceptions import ToolExecutionError, ToolValidationError
 
@@ -90,16 +91,19 @@ def main() -> int:
             injected if isinstance(injected, str) else None,
         )
     except ToolValidationError as exc:
-        _emit({"ok": False, "kind": "validation", "error": str(exc)})
+        if not _emit({"ok": False, "kind": "validation", "error": str(exc)}):
+            return _fail()
         return 2
     except ToolExecutionError as exc:
-        _emit({"ok": False, "kind": "execution", "error": str(exc)})
+        if not _emit({"ok": False, "kind": "execution", "error": str(exc)}):
+            return _fail()
         return 3
     except Exception:
         return _fail()
     if not isinstance(output, dict):
         return _fail()
-    _emit({"ok": True, "output": output})
+    if not _emit({"ok": True, "output": output}):
+        return _fail()
     return 0
 
 
@@ -205,13 +209,20 @@ def _limit_cpu(value: object) -> None:
         return
 
 
-def _emit(payload: dict) -> None:
-    sys.stdout.write(json.dumps(payload, sort_keys=True))
-    sys.stdout.flush()
+def _emit(payload: dict) -> bool:
+    """Serialize one JSON result. Refuse any payload that exceeds the stdout byte cap."""
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    limit = get_settings().tool_worker_stdout_max_bytes
+    if len(raw) > limit:
+        return False
+    sys.stdout.buffer.write(raw)
+    sys.stdout.buffer.flush()
+    return True
 
 
 def _fail() -> int:
-    _emit({"ok": False, "kind": "failed"})
+    if not _emit({"ok": False, "kind": "failed"}):
+        return 1
     return 1
 
 

@@ -60,11 +60,16 @@ def _ready(client, tmp_path, *tools: str):
     return folder, workspace, agent
 
 
-def _call(client, agent_id: str, name: str, arguments: dict):
-    return client.post(
+def _call(client, agent_id: str, name: str, arguments: dict, *, finish_approval: bool = True):
+    from tests.approval_support import finish_tool_test
+
+    response = client.post(
         f"/api/v1/tools/{name}/test",
         json={"arguments": arguments, "agent_id": agent_id},
     )
+    if finish_approval:
+        return finish_tool_test(client, response)
+    return response
 
 
 def test_registered_directory_and_file_commands(client, tmp_path):
@@ -162,6 +167,7 @@ def test_preview_requires_approval_and_rejects_reuse_and_changes(client, tmp_pat
         agent["id"],
         "preview_text",
         {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+        finish_approval=False,
     )
     assert proposed.status_code == 200, proposed.text
     assert proposed.json()["status"] == "confirmation_required"
@@ -182,6 +188,7 @@ def test_preview_requires_approval_and_rejects_reuse_and_changes(client, tmp_pat
         agent["id"],
         "preview_text",
         {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+        finish_approval=False,
     )
     rejected_id = rejected.json()["output"]["approval_id"]
     assert client.post(f"/api/v1/approvals/{rejected_id}/reject").status_code == 200
@@ -191,6 +198,7 @@ def test_preview_requires_approval_and_rejects_reuse_and_changes(client, tmp_pat
         agent["id"],
         "preview_text",
         {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+        finish_approval=False,
     )
     expired_id = expired.json()["output"]["approval_id"]
     with Session(get_engine()) as session:
@@ -204,6 +212,7 @@ def test_preview_requires_approval_and_rejects_reuse_and_changes(client, tmp_pat
         agent["id"],
         "preview_text",
         {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+        finish_approval=False,
     )
     changed_id = changed.json()["output"]["approval_id"]
     with Session(get_engine()) as session:
@@ -275,23 +284,29 @@ def test_timeout_stops_the_process_and_a_child_does_not_survive(client, tmp_path
 def test_start_audit_failure_does_not_run_the_command(client, tmp_path, monkeypatch):
     folder, workspace, agent = _ready(client, tmp_path, "show_directory")
     calls: list[str] = []
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"]}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="show_directory", arguments=args
+    )
 
     def refuse(session, event, attempt):
         raise OperationalError("injected", {}, RuntimeError("injected"))
 
     monkeypatch.setattr("app.commands.audit._commit", refuse)
     monkeypatch.setattr("app.commands.execute.supervise", lambda *args, **kwargs: calls.append("ran"))
-    tokens = bind_file_actor(agent["id"], "show_directory", None)
+    tokens = bind_file_actor(agent["id"], "show_directory", approval_id)
     try:
         with pytest.raises(ToolExecutionError, match="could not be recorded"):
-            execute_command(spec_for("show_directory"), {"workspace_id": workspace["id"]})
+            execute_command(spec_for("show_directory"), args)
     finally:
         reset_file_actor(tokens)
     assert calls == []
-    assert _events("show_directory") == []
-    denied = _call(client, agent["id"], "show_directory", {"workspace_id": workspace["id"]})
-    assert denied.status_code == 200
-    assert "note.txt" in denied.json()["output"]["stdout"]
+    assert "command_started" not in [row.event for row in _events("show_directory")]
+    listed = _call(client, agent["id"], "show_directory", {"workspace_id": workspace["id"]})
+    assert listed.status_code == 200
+    assert "note.txt" in listed.json()["output"]["stdout"]
     assert (folder / "note.txt").read_text(encoding="utf-8") == "hello"
 
 
@@ -306,7 +321,8 @@ def test_worker_start_audit_failure_returns_an_error(client, tmp_path):
     assert failed.json()["status"] == "error"
     assert "could not be recorded" in failed.json()["error"]
     assert "note.txt" not in failed.text
-    assert _events("show_directory") == []
+    assert "command_started" not in [row.event for row in _events("show_directory")]
+    assert "command_finished" not in [row.event for row in _events("show_directory")]
 
 
 def test_finish_audit_retries_then_records_completion(client, tmp_path):
@@ -521,28 +537,34 @@ async def test_cancelling_a_command_kills_the_worker(client, tmp_path, monkeypat
     registry.register(wait_tool())
     folder, workspace, agent = _ready(client, tmp_path, "bounded_wait")
     (folder / "note.txt").write_text("hello", encoding="utf-8")
-    session = _autocommit_session()
-    service = ToolService(
-        registry,
-        AgentToolGrantRepository(session),
-        AgentService(AgentRepository(session)),
-        workspace_grants=AgentWorkspaceGrantRepository(session),
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"]}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="bounded_wait", arguments=args
     )
+    tool = registry.get("bounded_wait")
+    executor = ToolExecutor()
     task = asyncio.create_task(
-        service.test("bounded_wait", {"workspace_id": workspace["id"]}, agent["id"])
+        executor.run(
+            tool,
+            args,
+            confirmed=False,
+            agent_id=agent["id"],
+            approval_id=approval_id,
+        )
     )
     try:
         await _wait_for_file(started)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
-        record = service.executor.reaped_workers[-1]
+        record = executor.reaped_workers[-1]
         assert record.returncode == -signal.SIGKILL
         assert not _alive(record.pid)
     finally:
         if not task.done():
             task.cancel()
-        session.close()
         registry.unregister("bounded_wait")
 
 
@@ -575,15 +597,22 @@ async def test_revoking_a_workspace_stops_the_command(client, tmp_path, monkeypa
     monkeypatch.setenv("ASSISTANT_FILE_TEST_STARTED_FILE", str(started))
     folder, workspace, agent = _ready(client, tmp_path, "show_directory")
     (folder / "note.txt").write_text("hello", encoding="utf-8")
-    session = _autocommit_session()
-    service = ToolService(
-        get_tool_registry(),
-        AgentToolGrantRepository(session),
-        AgentService(AgentRepository(session)),
-        workspace_grants=AgentWorkspaceGrantRepository(session),
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"]}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="show_directory", arguments=args
     )
+    tool = get_tool_registry().get("show_directory")
+    executor = ToolExecutor()
     task = asyncio.create_task(
-        service.test("show_directory", {"workspace_id": workspace["id"]}, agent["id"])
+        executor.run(
+            tool,
+            args,
+            confirmed=False,
+            agent_id=agent["id"],
+            approval_id=approval_id,
+        )
     )
     try:
         await _wait_for_file(started)
@@ -592,11 +621,10 @@ async def test_revoking_a_workspace_stops_the_command(client, tmp_path, monkeypa
     finally:
         if not task.done():
             task.cancel()
-        session.close()
     assert killed
     assert outcome.status == "error"
     assert outcome.output is None
-    record = service.executor.reaped_workers[-1]
+    record = executor.reaped_workers[-1]
     assert record.returncode == -signal.SIGKILL
     assert not _alive(record.pid)
     client.put(f"/api/v1/agents/{agent['id']}/workspaces", json={"workspace_ids": []})
@@ -641,26 +669,26 @@ async def test_parent_and_child_both_require_permission(client, tmp_path):
 async def test_two_commands_can_run_together(client, tmp_path):
     folder, workspace, agent = _ready(client, tmp_path, "show_directory")
     (folder / "other.txt").write_text("x", encoding="utf-8")
+    from tests.approval_support import prime_executing_approval
 
-    def service() -> ToolService:
-        session = _autocommit_session()
-        return ToolService(
-            get_tool_registry(),
-            AgentToolGrantRepository(session),
-            AgentService(AgentRepository(session)),
-            workspace_grants=AgentWorkspaceGrantRepository(session),
-        )
-
-    first = service()
-    second = service()
-    try:
-        left, right = await asyncio.gather(
-            first.test("show_directory", {"workspace_id": workspace["id"]}, agent["id"]),
-            second.test("show_directory", {"workspace_id": workspace["id"]}, agent["id"]),
-        )
-    finally:
-        first.grants.session.close()
-        second.grants.session.close()
+    args = {"workspace_id": workspace["id"]}
+    left_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="show_directory", arguments=args
+    )
+    right_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="show_directory", arguments=args
+    )
+    tool = get_tool_registry().get("show_directory")
+    left_executor = ToolExecutor()
+    right_executor = ToolExecutor()
+    left, right = await asyncio.gather(
+        left_executor.run(
+            tool, args, confirmed=False, agent_id=agent["id"], approval_id=left_approval
+        ),
+        right_executor.run(
+            tool, args, confirmed=False, agent_id=agent["id"], approval_id=right_approval
+        ),
+    )
     assert left.status == "ok"
     assert right.status == "ok"
     assert "note.txt" in left.output["stdout"]

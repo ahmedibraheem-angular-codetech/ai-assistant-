@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import errno
 import hashlib
+import logging
 import os
 import signal
 import stat
@@ -27,6 +28,8 @@ import time
 from dataclasses import dataclass, field
 
 from app.mcp.loader import ServerConfig, blocked_location
+
+logger = logging.getLogger(__name__)
 
 MAX_EXECUTABLE_BYTES = 64 * 1024 * 1024
 STDERR_LIMIT = 64 * 1024
@@ -57,9 +60,24 @@ MACOS_PATH_LOOKUP = (
 
 
 class ProcessError(Exception):
-    def __init__(self, code: str, *, errno_value: int | None = None) -> None:
+    """Spawn/assessment failure.
+
+    When Linux post-fork cleanup cannot confirm reap, ``unreaped`` carries a
+    signal/reap-only ``ChildProcess`` (stdin/stdout/stderr already -1). Callers
+    must transfer that handle into session lifecycle ownership; it is never a
+    successful spawn and must not be treated as cleaned up.
+    """
+
+    def __init__(
+        self,
+        code: str,
+        *,
+        errno_value: int | None = None,
+        unreaped: ChildProcess | None = None,
+    ) -> None:
         self.code = code
         self.errno_value = errno_value
+        self.unreaped = unreaped
         super().__init__("The MCP process could not be started.")
 
 
@@ -143,7 +161,10 @@ class ChildProcess:
         """Reap the child. Return True only when the wait confirmed exit.
 
         When wait_seconds is set, polling stays bounded and returns False if
-        the child is still alive when the deadline expires.
+        the child is still alive when the deadline expires. On that failure
+        path, stdout/stderr (and any still-open stdin) stay open so the parent
+        retains I/O ownership until a later confirmed reap closes them. Pipe
+        ends are closed only after exit is confirmed (or was already reaped).
         """
         if self.reaped:
             self._close_fds()
@@ -165,7 +186,6 @@ class ChildProcess:
                 continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                self._close_fds()
                 return False
             time.sleep(min(0.01, remaining))
 
@@ -471,16 +491,27 @@ def _spawn_linux(plan: SpawnPlan, facts: ExecutableFacts, generation: int, descr
     try:
         outcome, err = _confirm_linux_exec(error_read, EXEC_PIPE_SECONDS)
     except Exception as exc:
-        _kill_and_reap(pid)
-        _close_many([stdin_write, stdout_read, stderr_read, error_read])
-        if isinstance(exc, ProcessError):
-            raise
-        raise ProcessError("spawn_failed") from exc
+        # When cleanup confirms reap, `_release_failed_linux_child` may return
+        # the same ProcessError instance as ``exc``. Never ``raise exc from exc``.
+        error = _release_failed_linux_child(
+            pid,
+            facts,
+            generation,
+            [stdin_write, stdout_read, stderr_read, error_read],
+            cause=exc,
+        )
+        if error is exc:
+            raise error
+        raise error from exc
     os.close(error_read)
     if outcome != "success":
-        _kill_and_reap(pid)
-        _close_many([stdin_write, stdout_read, stderr_read])
-        raise ProcessError("spawn_failed", errno_value=err)
+        raise _release_failed_linux_child(
+            pid,
+            facts,
+            generation,
+            [stdin_write, stdout_read, stderr_read],
+            errno_value=err,
+        )
     return ChildProcess(pid, pid, stdin_write, stdout_read, stderr_read, facts, generation)
 
 
@@ -635,12 +666,72 @@ def _reap_failed_child(pid: int, *, wait_seconds: float = REAP_FAILED_SECONDS) -
             waited, _status = os.waitpid(pid, os.WNOHANG)
         except ChildProcessError:
             return True
+        except InterruptedError:
+            # Bound the loop: interruptions must not extend past the deadline.
+            if deadline - time.monotonic() <= 0:
+                return False
+            continue
+        except OSError as exc:
+            if exc.errno == errno.ECHILD:
+                return True
+            if exc.errno == errno.EINTR:
+                if deadline - time.monotonic() <= 0:
+                    return False
+                continue
+            raise
         if waited != 0:
             return True
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             return False
         time.sleep(min(0.01, remaining))
+
+
+def _release_failed_linux_child(
+    pid: int,
+    facts: ExecutableFacts,
+    generation: int,
+    parent_fds: list[int],
+    *,
+    errno_value: int | None = None,
+    cause: Exception | None = None,
+) -> ProcessError:
+    """Finish a failed post-fork Linux spawn without silently dropping the pid.
+
+    Invariants:
+    - Parent pipe ends in ``parent_fds`` are closed before return or re-raise,
+      even if ``_kill_and_reap`` raises unexpectedly.
+    - If kill/reap confirms exit, ``ProcessError.unreaped`` is None (cleanup ok).
+    - If reap is not confirmed, ``unreaped`` is a signal/reap-only ChildProcess
+      with stdin/stdout/stderr already -1 (not a live stdio session). Callers
+      must adopt that handle into session ``_stopping`` ownership; this path
+      never reports successful cleanup and never returns a runnable ChildProcess.
+    - The unreaped handle is allocated before cleanup. If ``_kill_and_reap``
+      raises, the exception is wrapped as ``ProcessError(..., unreaped=...)``
+      so session ownership can still adopt the pid.
+    """
+    unreaped = ChildProcess(pid, pid, -1, -1, -1, facts, generation)
+    try:
+        try:
+            reaped = _kill_and_reap(pid)
+        except Exception as exc:
+            raise ProcessError(
+                "spawn_failed",
+                errno_value=errno_value,
+                unreaped=unreaped,
+            ) from exc
+    finally:
+        _close_many(parent_fds)
+    if reaped:
+        if isinstance(cause, ProcessError) and cause.unreaped is None:
+            return cause
+        return ProcessError("spawn_failed", errno_value=errno_value)
+    logger.warning(
+        "MCP Linux spawn cleanup left unreaped child pid=%s generation=%s",
+        pid,
+        generation,
+    )
+    return ProcessError("spawn_failed", errno_value=errno_value, unreaped=unreaped)
 
 
 def _bind_syscall():

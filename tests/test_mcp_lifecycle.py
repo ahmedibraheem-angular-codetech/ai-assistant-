@@ -15,7 +15,7 @@ from app.core.database import init_database
 from app.mcp import loader
 from app.mcp import session as mcp_session
 from app.mcp.loader import reload_configuration, set_epoch_listener
-from app.mcp.process import assess_executable
+from app.mcp.process import ProcessError, assess_executable
 from app.mcp.session import (
     SessionError,
     allow_sessions,
@@ -603,3 +603,96 @@ def test_bring_up_preserves_startup_error_when_abandon_shutdown_raises(published
     with pytest.raises(SessionError) as again:
         open_session("notes")
     assert again.value.code == "busy"
+
+
+def test_unreaped_spawn_failure_is_tracked_and_blocks_admission(published):
+    """ProcessError.unreaped is adopted into `_stopping` and blocks a new generation."""
+    holder: list[FakeChild] = []
+
+    def launch(server, facts, generation: int):
+        child = FakeChild(facts, generation)
+        _deny_reap(child)
+        holder.append(child)
+        raise ProcessError("spawn_failed", unreaped=child)
+
+    set_spawn_override(launch)
+    set_test_timing(max_processes=2, stdin_grace=0, term_grace=0)
+    with pytest.raises(SessionError) as caught:
+        open_session("notes")
+    assert caught.value.code == "startup_failed"
+    assert len(holder) == 1
+    assert mcp_session._stopping.get("notes") is not None
+    assert mcp_session._stopping["notes"].child is holder[0]
+    assert holder[0].reaped is False
+
+    with pytest.raises(SessionError) as blocked:
+        open_session("notes")
+    assert blocked.value.code == "busy"
+
+
+def test_unreaped_spawn_failure_counts_toward_max_processes(published):
+    database, _raw = published
+    _write_config(database, json.dumps(_document(servers=["notes", "mail"])).encode())
+    assert reload_configuration().published is True
+    holder: list[FakeChild] = []
+
+    def launch(server, facts, generation: int):
+        child = FakeChild(facts, generation)
+        _deny_reap(child)
+        holder.append(child)
+        raise ProcessError("spawn_failed", unreaped=child)
+
+    set_spawn_override(launch)
+    set_test_timing(max_processes=1, stdin_grace=0, term_grace=0)
+    with pytest.raises(SessionError):
+        open_session("notes")
+    assert mcp_session._stopping.get("notes") is not None
+    with pytest.raises(SessionError) as caught:
+        open_session("mail")
+    assert caught.value.code == "busy"
+    assert holder[0].reaped is False
+
+
+def test_shutdown_all_inflight_timeout_reports_and_retains_ownership(published, caplog, monkeypatch):
+    """When inflight outlives the drain wait, shutdown must not claim a clean slate."""
+    entered = threading.Event()
+    hold = threading.Event()
+    holder: list[FakeChild] = []
+
+    def launch(server, facts, generation: int) -> FakeChild:
+        child = FakeChild(facts, generation)
+        holder.append(child)
+        entered.set()
+        assert hold.wait(timeout=5)
+        return child
+
+    set_spawn_override(launch)
+    monkeypatch.setattr(mcp_session, "_inflight_drain_seconds", lambda: 0.0)
+    outcome: dict[str, str] = {}
+
+    def opener() -> None:
+        try:
+            open_session("notes")
+        except SessionError as exc:
+            outcome["code"] = exc.code
+
+    worker = threading.Thread(target=opener)
+    worker.start()
+    assert entered.wait(2)
+    _deny_reap(holder[0])
+    with caplog.at_level(logging.WARNING):
+        shutdown_all()
+    assert any("MCP inflight startup remains after shutdown_all" in record.message for record in caplog.records)
+    assert "notes" in mcp_session._inflight
+    hold.set()
+    worker.join(2)
+    assert worker.is_alive() is False
+    assert outcome.get("code") == "shutting_down"
+    assert mcp_session._stopping.get("notes") is not None
+    assert mcp_session._stopping["notes"].child is holder[0]
+    assert holder[0].reaped is False
+
+    allow_sessions()
+    with pytest.raises(SessionError) as caught:
+        open_session("notes")
+    assert caught.value.code == "busy"

@@ -372,12 +372,17 @@ def test_quarantine_is_reversible_and_absent_from_workspace_search(client, tmp_p
     listed = client.get("/api/v1/file-recoveries")
     recovery_id = listed.json()["recoveries"][0]["id"]
     assert "keep" not in json.dumps(listed.json())
-    search = client.post(
-        "/api/v1/tools/search_files/test",
-        json={
-            "arguments": {"workspace_id": workspace["id"], "query": "keep"},
-            "agent_id": agent["id"],
-        },
+    from tests.approval_support import finish_tool_test
+
+    search = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/search_files/test",
+            json={
+                "arguments": {"workspace_id": workspace["id"], "query": "keep"},
+                "agent_id": agent["id"],
+            },
+        ),
     )
     assert search.status_code == 200, search.text
     assert search.json()["output"]["count"] == 0

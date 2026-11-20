@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     file_max_concurrent_workers: int = Field(default=4, ge=1, le=16)
     # CPU-time backstop inside a worker, in seconds. The parent timeout is shorter.
     file_worker_cpu_seconds: int = Field(default=30, ge=1, le=60)
+    # Isolated worker pipe caps after UTF-8 serialization. Parent enforces both;
+    # the worker applies the stdout cap in _emit as defense in depth.
+    tool_worker_stdout_max_bytes: int = Field(default=1_048_576, ge=64, le=16_777_216)
+    tool_worker_stderr_max_bytes: int = Field(default=65_536, ge=64, le=1_048_576)
     # Search snippets returned to a model turn.
     file_search_snippet_chars: int = Field(default=180, ge=40, le=500)
     # In-memory archive reads. These limits reject zip bombs before and during decompression.

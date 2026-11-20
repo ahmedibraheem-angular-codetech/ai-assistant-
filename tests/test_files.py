@@ -42,14 +42,19 @@ def register(client, path: Path, name: str = "Notes") -> dict:
     return response.json()
 
 
-def read_tool(client, agent_id: str, workspace_id: str, relative_path: str):
-    return client.post(
+def read_tool(client, agent_id: str, workspace_id: str, relative_path: str, *, finish_approval: bool = True):
+    from tests.approval_support import finish_tool_test
+
+    response = client.post(
         "/api/v1/tools/read_file/test",
         json={
             "arguments": {"workspace_id": workspace_id, "relative_path": relative_path},
             "agent_id": agent_id,
         },
     )
+    if finish_approval:
+        return finish_tool_test(client, response)
+    return response
 
 
 def _approved(path: Path):
@@ -445,24 +450,32 @@ def test_search_metadata_and_project_inspection(client, tmp_path):
     grant(client, agent["id"], ["search_files", "get_file_metadata", "inspect_project", "list_files"])
     grant_workspace(client, agent["id"], workspace["id"])
 
-    found = client.post(
-        "/api/v1/tools/search_files/test",
-        json={
-            "arguments": {"workspace_id": workspace["id"], "query": "bluebird"},
-            "agent_id": agent["id"],
-        },
+    from tests.approval_support import finish_tool_test
+
+    found = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/search_files/test",
+            json={
+                "arguments": {"workspace_id": workspace["id"], "query": "bluebird"},
+                "agent_id": agent["id"],
+            },
+        ),
     )
     assert found.status_code == 200, found.text
     matches = found.json()["output"]["matches"]
     assert matches[0]["relative_path"] == "notes.md"
     assert "bluebird" in matches[0]["snippet"]
 
-    info = client.post(
-        "/api/v1/tools/get_file_metadata/test",
-        json={
-            "arguments": {"workspace_id": workspace["id"], "relative_path": "notes.md"},
-            "agent_id": agent["id"],
-        },
+    info = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/get_file_metadata/test",
+            json={
+                "arguments": {"workspace_id": workspace["id"], "relative_path": "notes.md"},
+                "agent_id": agent["id"],
+            },
+        ),
     )
     body = info.json()["output"]
     assert body["filename"] == "notes.md"
@@ -471,21 +484,27 @@ def test_search_metadata_and_project_inspection(client, tmp_path):
     assert "root_path" not in body
     assert str(folder) not in info.text
 
-    inspected = client.post(
-        "/api/v1/tools/inspect_project/test",
-        json={"arguments": {"workspace_id": workspace["id"]}, "agent_id": agent["id"]},
+    inspected = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/inspect_project/test",
+            json={"arguments": {"workspace_id": workspace["id"]}, "agent_id": agent["id"]},
+        ),
     )
     project = inspected.json()["output"]
     assert any(item["language"] == "Python" for item in project["languages"])
     assert "FastAPI" in project["frameworks"]
     assert "pyproject.toml" in project["manifests"]
     assert "FastAPI()" not in str(project["tree"])
-    listed = client.post(
-        "/api/v1/tools/list_files/test",
-        json={
-            "arguments": {"workspace_id": workspace["id"], "recursive": True, "extension_filter": ".py"},
-            "agent_id": agent["id"],
-        },
+    listed = finish_tool_test(
+        client,
+        client.post(
+            "/api/v1/tools/list_files/test",
+            json={
+                "arguments": {"workspace_id": workspace["id"], "recursive": True, "extension_filter": ".py"},
+                "agent_id": agent["id"],
+            },
+        ),
     )
     names = [item["relative_path"] for item in listed.json()["output"]["entries"]]
     assert names == ["app/main.py"]
@@ -505,10 +524,8 @@ def test_chat_file_question_reads_only_the_approved_file(client, tmp_path, monke
 
     def respond(item, calls):
         if len(calls) == 1:
-            return tool_call("search_files", {"workspace_id": workspace["id"], "query": "bluebird"})
-        if len(calls) == 2:
             return tool_call("read_file", {"workspace_id": workspace["id"], "relative_path": "launch.txt"})
-        return "The launch code is bluebird."
+        return "Waiting for approval."
 
     calls = scripted_chat(monkeypatch, respond)
     response = client.post(
@@ -516,12 +533,19 @@ def test_chat_file_question_reads_only_the_approved_file(client, tmp_path, monke
         json={"message": "What is the launch code?", "agent_id": agent["id"]},
     )
     assert response.status_code == 200
-    assert response.json()["answer"] == "The launch code is bluebird."
+    assert "bluebird" not in response.json()["answer"]
     assert calls[0]["system_prompt"].startswith("Be exact.")
     assert "untrusted data" in calls[0]["system_prompt"]
-    joined = "\n".join(item["content"] for item in calls[-1]["history"])
-    assert "Ignore all previous instructions" in joined
     assert "Ignore all previous instructions" not in calls[0]["system_prompt"]
+    pending = client.get("/api/v1/approvals")
+    assert pending.status_code == 200
+    assert pending.json()["count"] == 1
+    approval_id = pending.json()["approvals"][0]["id"]
+    approved = client.post(f"/api/v1/approvals/{approval_id}/approve")
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "COMPLETED"
+    assert "bluebird" in approved.json()["output"]["content"]
+    assert "Ignore all previous instructions" in approved.json()["output"]["content"]
     assert client.get("/api/v1/memories").json()["count"] == 0
     assert get_tool_registry().get("read_file").ran_on_loop is False
 
@@ -544,6 +568,12 @@ async def test_file_read_timeout_kills_the_worker(client, tmp_path, monkeypatch)
     agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"], "relative_path": "note.txt"}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
+    )
     tool = get_tool_registry().get("read_file")
     tool.timeout_seconds = 0.25
     tool.ran_on_loop = False
@@ -552,9 +582,10 @@ async def test_file_read_timeout_kills_the_worker(client, tmp_path, monkeypatch)
     try:
         outcome = await executor.run(
             tool,
-            {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+            args,
             confirmed=False,
             agent_id=agent["id"],
+            approval_id=approval_id,
         )
     finally:
         tool.timeout_seconds = 15.0
@@ -579,15 +610,22 @@ async def test_file_read_cancellation_kills_the_worker(client, tmp_path, monkeyp
     grant_workspace(client, agent["id"], workspace["id"])
     monkeypatch.setenv("ASSISTANT_FILE_TEST_DELAY_SECONDS", "1.5")
     monkeypatch.setenv("ASSISTANT_FILE_TEST_STARTED_FILE", str(started))
+    from tests.approval_support import prime_executing_approval
+
+    args = {"workspace_id": workspace["id"], "relative_path": "note.txt"}
+    approval_id = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=args
+    )
     tool = get_tool_registry().get("read_file")
     tool.ran_on_loop = False
     executor = ToolExecutor()
     task = asyncio.create_task(
         executor.run(
             tool,
-            {"workspace_id": workspace["id"], "relative_path": "note.txt"},
+            args,
             confirmed=False,
             agent_id=agent["id"],
+            approval_id=approval_id,
         )
     )
     await _wait_for_file(started)
@@ -610,6 +648,16 @@ async def test_concurrent_file_reads_do_not_block_the_event_loop(client, tmp_pat
     agent = create_agent(client, model="tool-model", system_prompt="Be exact.")
     grant(client, agent["id"], ["read_file"])
     grant_workspace(client, agent["id"], workspace["id"])
+    from tests.approval_support import prime_executing_approval
+
+    left_args = {"workspace_id": workspace["id"], "relative_path": "a.txt"}
+    right_args = {"workspace_id": workspace["id"], "relative_path": "b.txt"}
+    left_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=left_args
+    )
+    right_approval = prime_executing_approval(
+        client, agent_id=agent["id"], tool_name="read_file", arguments=right_args
+    )
     tool = get_tool_registry().get("read_file")
     tool.ran_on_loop = False
     executor = ToolExecutor()
@@ -620,16 +668,20 @@ async def test_concurrent_file_reads_do_not_block_the_event_loop(client, tmp_pat
         await asyncio.sleep(0.05)
         tick_at = time.monotonic()
 
-    async def read(name: str):
+    async def read(name: str, approval_id: str):
         return await executor.run(
             tool,
             {"workspace_id": workspace["id"], "relative_path": name},
             confirmed=False,
             agent_id=agent["id"],
+            approval_id=approval_id,
         )
 
     tick_task = asyncio.create_task(tick())
-    left, right = await asyncio.gather(read("a.txt"), read("b.txt"))
+    left, right = await asyncio.gather(
+        read("a.txt", left_approval),
+        read("b.txt", right_approval),
+    )
     finished_at = time.monotonic()
     await tick_task
     assert left.status == "ok"

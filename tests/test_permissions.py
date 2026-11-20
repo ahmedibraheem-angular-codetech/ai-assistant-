@@ -16,8 +16,8 @@ from app.core.database import get_engine, init_database, reset_database
 from app.files.authorization import authorize, bind_file_actor, reset_file_actor
 from app.files.exceptions import FileAccessError
 from app.main import app
-from app.permissions.engine import ALLOW, DENY, REQUIRES_APPROVAL
-from app.permissions.manifests import ToolManifest, ToolManifestError
+from app.permissions.engine import ALLOW, DENY, REQUIRES_APPROVAL, PermissionFacts, decide
+from app.permissions.manifests import ToolManifest, ToolManifestError, manifest_for_tool
 from app.tools.base import ASYNC_READ_ONLY, Tool
 from app.tools.grants import AgentToolGrantRepository
 from app.tools.registry import ToolRegistry, get_tool_registry
@@ -151,12 +151,13 @@ def test_modes_classify_reads_and_sensitive_actions(client, tmp_path, monkeypatc
         action="read",
     )
     assert file_decision["decision"] == REQUIRES_APPROVAL
-    blocked = read_tool(client, agent["id"], workspace["id"], "note.txt")
+    blocked = read_tool(client, agent["id"], workspace["id"], "note.txt", finish_approval=False)
     assert blocked.status_code == 200
     assert blocked.json()["status"] == "confirmation_required"
     assert "secret line" not in blocked.text
 
     _mode(client, "ask_sensitive")
+    # read_file / web_search declare approval_required=True — must not silent-ALLOW.
     assert _evaluate(
         client,
         agent_id=agent["id"],
@@ -165,10 +166,15 @@ def test_modes_classify_reads_and_sensitive_actions(client, tmp_path, monkeypatc
         resource_id=workspace["id"],
         relative_path="note.txt",
         action="read",
-    )["decision"] == ALLOW
-    opened = read_tool(client, agent["id"], workspace["id"], "note.txt")
+    )["decision"] == REQUIRES_APPROVAL
+    paused = read_tool(client, agent["id"], workspace["id"], "note.txt", finish_approval=False)
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "confirmation_required"
+    assert "secret line" not in paused.text
+    opened = read_tool(client, agent["id"], workspace["id"], "note.txt", finish_approval=True)
     assert opened.status_code == 200
     assert opened.json()["status"] == "ok"
+    assert opened.json()["output"]["content"] == "secret line"
     sensitive = _evaluate(
         client,
         agent_id=agent["id"],
@@ -176,7 +182,7 @@ def test_modes_classify_reads_and_sensitive_actions(client, tmp_path, monkeypatc
         resource_type="internet",
         action="read",
     )
-    assert sensitive["decision"] == ALLOW
+    assert sensitive["decision"] == REQUIRES_APPROVAL
 
     _mode(client, "restricted_auto")
     assert _evaluate(
@@ -191,10 +197,20 @@ def test_modes_classify_reads_and_sensitive_actions(client, tmp_path, monkeypatc
     )
     assert internet["decision"] == DENY
     assert internet["code"] == "restricted"
+    read_restricted = _evaluate(
+        client,
+        agent_id=agent["id"],
+        tool_name="read_file",
+        resource_type="file",
+        resource_id=workspace["id"],
+        relative_path="note.txt",
+        action="read",
+    )
+    assert read_restricted["decision"] == DENY
+    assert read_restricted["code"] == "restricted"
     mutation = _evaluate(client, resource_type="file", action="delete")
     assert mutation["decision"] == DENY
     assert "not permitted" in mutation["reason"]
-
 
 def test_tool_switch_does_not_grant_resources(client, tmp_path):
     agent = create_agent(client, system_prompt="Be exact.")
@@ -463,3 +479,101 @@ def test_version_7_workspace_grant_survives_the_permission_migration(tmp_path, m
     finally:
         reset_database()
         get_settings.cache_clear()
+
+
+def _facts(**overrides) -> PermissionFacts:
+    base = dict(
+        mode="ask_sensitive",
+        agent_id="agent",
+        agent_found=True,
+        agent_enabled=True,
+        tool_name="probe",
+        tool_known=True,
+        tool_enabled=True,
+        tool_granted=True,
+        risk="read",
+        action="read",
+        allowed_actions=("read",),
+        resource_type="file",
+        workspace_required=True,
+        workspace_granted=True,
+        path_allowed=True,
+        internet=False,
+        approval_required=False,
+        change_granted=True,
+    )
+    base.update(overrides)
+    return PermissionFacts(**base)
+
+
+def test_approval_required_true_blocks_silent_allow_under_ask_sensitive():
+    decision = decide(_facts(approval_required=True, risk="read", mode="ask_sensitive"))
+    assert decision.decision == REQUIRES_APPROVAL
+    assert decision.code == "approval"
+
+
+def test_approval_required_false_still_allows_reads_under_ask_sensitive():
+    decision = decide(_facts(approval_required=False, risk="read", mode="ask_sensitive"))
+    assert decision.decision == ALLOW
+    assert decision.code == "allow"
+
+
+def test_approval_required_true_is_denied_in_restricted_auto():
+    decision = decide(_facts(approval_required=True, risk="read", mode="restricted_auto", internet=False))
+    assert decision.decision == DENY
+    assert decision.code == "restricted"
+
+
+def test_manifest_approval_required_reaches_permission_facts_and_runtime(client, tmp_path):
+    folder = tmp_path / "notes"
+    folder.mkdir()
+    (folder / "note.txt").write_text("visible", encoding="utf-8")
+    workspace = register(client, folder)
+    agent = create_agent(client, system_prompt="Be exact.")
+    grant(client, agent["id"], ["read_file", "calculator"])
+    grant_workspace(client, agent["id"], workspace["id"])
+    _mode(client, "ask_sensitive")
+
+    read_manifest = manifest_for_tool(get_tool_registry().get("read_file"))
+    calc_manifest = manifest_for_tool(get_tool_registry().get("calculator"))
+    assert read_manifest.approval_required is True
+    assert calc_manifest.approval_required is False
+
+    read_decision = _evaluate(
+        client,
+        agent_id=agent["id"],
+        tool_name="read_file",
+        resource_type="file",
+        resource_id=workspace["id"],
+        relative_path="note.txt",
+        action="read",
+    )
+    assert read_decision["decision"] == REQUIRES_APPROVAL
+    calc_decision = _evaluate(
+        client,
+        agent_id=agent["id"],
+        tool_name="calculator",
+        resource_type="none",
+        action="execute",
+    )
+    assert calc_decision["decision"] == ALLOW
+
+    paused = read_tool(client, agent["id"], workspace["id"], "note.txt", finish_approval=False)
+    assert paused.json()["status"] == "confirmation_required"
+    approval_id = paused.json()["output"]["approval_id"]
+    detail = client.get(f"/api/v1/approvals/{approval_id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "PENDING"
+
+    rejected = client.post(f"/api/v1/approvals/{approval_id}/reject")
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "REJECTED"
+    assert client.post(f"/api/v1/approvals/{approval_id}/approve").status_code == 409
+
+    missing = client.get("/api/v1/approvals/does-not-exist")
+    assert missing.status_code == 404
+
+    completed = read_tool(client, agent["id"], workspace["id"], "note.txt", finish_approval=True)
+    assert completed.status_code == 200
+    assert completed.json()["status"] == "ok"
+    assert completed.json()["output"]["content"] == "visible"

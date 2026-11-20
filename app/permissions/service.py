@@ -200,6 +200,7 @@ def _facts(
         workspace_granted=workspace_granted,
         path_allowed=path_allowed,
         internet=internet,
+        approval_required=bool(manifest.approval_required) if manifest is not None else False,
         change_granted=_change_granted(
             session,
             canonical,
