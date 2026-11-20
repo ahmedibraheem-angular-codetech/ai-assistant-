@@ -125,3 +125,106 @@ def update_team(
         return {"agent_id": manager, "member_ids": replace_team(session, manager, members)}
     except TeamError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+# ------------------------------------------------------------- hiring studio
+
+
+class HireRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template_id: str = Field(min_length=1, max_length=40)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    workspace_ids: list[str] = Field(default_factory=list, max_length=20)
+    extra_instructions: str | None = Field(default=None, max_length=4_000)
+    apply_budget: bool = True
+
+
+@router.get("/agent-templates")
+def list_templates(_local: None = Depends(require_local_admin)):
+    from app.agents.templates import TEMPLATES
+
+    items = [template.public() for template in TEMPLATES.values()]
+    return {"templates": items, "count": len(items)}
+
+
+@router.post("/agents/hire", status_code=201)
+def hire_agent(
+    payload: HireRequest,
+    _local: None = Depends(require_local_admin),
+    agents: AgentService = Depends(get_agent_service),
+    session: Session = Depends(get_db),
+):
+    """Create an agent from a template, grant only the template's tools."""
+    from app.agents.exceptions import DuplicateAgentNameError
+    from app.agents.schemas import AgentCreate
+    from app.agents.templates import TEMPLATES
+    from app.core.config import get_settings
+    from app.files.exceptions import InvalidWorkspaceIdError, WorkspaceNotFoundError
+    from app.files.grants import AgentWorkspaceGrantRepository, AgentWorkspaceGrantService
+    from app.files.repository import WorkspaceRepository
+    from app.tools.grants import AgentToolGrantRepository
+    from app.tools.registry import get_tool_registry
+    from app.tools.service import ToolService
+
+    template = TEMPLATES.get(payload.template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="That template does not exist.")
+    model = (payload.model or get_settings().ollama_model or "").strip()
+    if not model:
+        raise HTTPException(status_code=422, detail="Choose a model or set OLLAMA_MODEL first.")
+    prompt = template.system_prompt
+    if payload.extra_instructions and payload.extra_instructions.strip():
+        prompt = f"{prompt}\n\nExtra instructions from the user:\n{payload.extra_instructions.strip()}"
+    registry = get_tool_registry()
+    granted = [name for name in template.tools if registry.get(name) is not None]
+    try:
+        agent = agents.create(
+            AgentCreate(
+                name=payload.name or template.name,
+                description=template.description,
+                role=template.role,
+                system_prompt=prompt,
+                model=model,
+                enabled=True,
+            )
+        )
+    except DuplicateAgentNameError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    tools = ToolService(
+        registry,
+        AgentToolGrantRepository(session),
+        agents,
+        workspace_grants=AgentWorkspaceGrantRepository(session),
+    )
+    tools.replace_grants(agent.id, granted)
+    workspaces: list[str] = []
+    if payload.workspace_ids:
+        grants = AgentWorkspaceGrantService(
+            AgentWorkspaceGrantRepository(session), WorkspaceRepository(session), agents
+        )
+        try:
+            workspaces = list(grants.replace(agent.id, payload.workspace_ids).workspace_ids)
+        except (InvalidWorkspaceIdError, WorkspaceNotFoundError) as exc:
+            agents.delete(agent.id)
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    budget = None
+    if payload.apply_budget and (template.daily_tool_calls or template.daily_chat_turns):
+        budget = controls.set_budget(
+            session,
+            agent.id,
+            controls.Budget(
+                daily_tool_calls=template.daily_tool_calls,
+                daily_chat_turns=template.daily_chat_turns,
+            ),
+        )
+    return {
+        "agent": agent.model_dump(mode="json"),
+        "template_id": template.id,
+        "granted_tools": granted,
+        "workspace_ids": workspaces,
+        "budget": budget,
+        "standing_approvals": [],
+        "next_steps": list(template.notes),
+    }

@@ -141,6 +141,20 @@ Members keep their own tools, workspaces, approvals, and budgets; delegation
 never widens permissions. Members cannot delegate further. A member's answer
 reaches the manager as untrusted data.
 
+### Hiring studio (agent templates)
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/agent-templates
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/hire \
+  -d '{"template_id":"marketing","name":"Ads","workspace_ids":[]}'
+```
+
+Templates: `marketing`, `developer`, `researcher`, `secretary`, `analyst`,
+`manager`. Hiring creates a normal, editable agent with the template's
+instructions, only the template's tools, and a suggested daily budget. It does
+not create standing approvals; add those yourself if you want them.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is
