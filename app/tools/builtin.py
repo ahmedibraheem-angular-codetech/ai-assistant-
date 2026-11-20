@@ -1,3 +1,4 @@
+from app.agents.team import DelegateTaskTool
 from app.commands.tools import builtin_command_tools
 from app.files.tools import builtin_file_tools
 from app.knowledge.tools import builtin_knowledge_tools
@@ -15,6 +16,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         DateTimeTool(),
         WebSearchTool(DuckDuckGoSearchProvider()),
         ResearchTool(),
+        DelegateTaskTool(),
         *builtin_file_tools(),
         *builtin_command_tools(),
         *builtin_knowledge_tools(),

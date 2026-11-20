@@ -92,6 +92,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 18:
         upgrade_to_18(engine)
         return
+    if version == 19:
+        upgrade_to_19(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -197,6 +200,13 @@ def upgrade_to_18(engine: Engine) -> None:
     from app.core.controls import AssistantControlRecord
 
     AssistantControlRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_19(engine: Engine) -> None:
+    """Add agent teams for delegation. No existing table is rewritten."""
+    from app.agents.team import AgentTeamMemberRecord
+
+    AgentTeamMemberRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

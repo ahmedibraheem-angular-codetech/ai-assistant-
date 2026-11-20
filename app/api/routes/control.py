@@ -87,3 +87,41 @@ def clear_budget(
     session: Session = Depends(get_db),
 ):
     return controls.set_budget(session, _agent_id(agents, agent_id), None)
+
+
+class TeamUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    member_ids: list[str] = Field(default_factory=list, max_length=16)
+
+
+@router.get("/agents/{agent_id}/team")
+def read_team(
+    agent_id: str,
+    _local: None = Depends(require_local_admin),
+    agents: AgentService = Depends(get_agent_service),
+    session: Session = Depends(get_db),
+):
+    from app.agents.team import team_of
+
+    manager = _agent_id(agents, agent_id)
+    return {"agent_id": manager, "member_ids": team_of(session, manager)}
+
+
+@router.put("/agents/{agent_id}/team")
+def update_team(
+    agent_id: str,
+    payload: TeamUpdate,
+    _local: None = Depends(require_local_admin),
+    agents: AgentService = Depends(get_agent_service),
+    session: Session = Depends(get_db),
+):
+    """Members the agent may delegate to. They keep their own permissions."""
+    from app.agents.team import TeamError, replace_team
+
+    manager = _agent_id(agents, agent_id)
+    members = [_agent_id(agents, member) for member in payload.member_ids]
+    try:
+        return {"agent_id": manager, "member_ids": replace_team(session, manager, members)}
+    except TeamError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

@@ -124,6 +124,23 @@ are killed. The pause survives restarts. Budgets are daily (UTC) per agent;
 `AGENT_DAILY_TOOL_CALLS` / `AGENT_DAILY_CHAT_TURNS` set a default for all
 agents. Usage counters reset when the server restarts.
 
+### Teams (delegation)
+
+A manager agent can hand sub-tasks to members of its team with the
+`delegate_task` tool:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/<manager>/team -d '{"member_ids":["<member>"]}'
+# then grant the manager the tool:
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/<manager>/tools -d '{"allowed_tools":["delegate_task"]}'
+```
+
+Members keep their own tools, workspaces, approvals, and budgets; delegation
+never widens permissions. Members cannot delegate further. A member's answer
+reaches the manager as untrusted data.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is
