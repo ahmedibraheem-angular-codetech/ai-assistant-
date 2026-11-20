@@ -208,7 +208,25 @@ def _facts(
             resource_id if isinstance(resource_id, str) else None,
             relative_path,
         ),
+        standing_approved=_standing_matches(
+            session,
+            agent_id=canonical if agent_id is not None else None,
+            tool_name=tool_name,
+            manifest=manifest,
+            action=action,
+            workspace_required=workspace_required,
+            workspace_id=workspace_id,
+            relative_path=relative_path,
+        ),
     )
+
+
+def _standing_matches(session, *, action: str, **kwargs) -> bool:
+    from app.permissions.standing import matches
+
+    if action in {"create", "write", "modify", "delete"}:
+        return False
+    return matches(session, **kwargs)
 
 
 def _agent(session, agent_id: str | None) -> tuple[bool, bool, str | None]:

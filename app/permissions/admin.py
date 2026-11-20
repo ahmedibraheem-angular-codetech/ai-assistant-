@@ -280,3 +280,38 @@ class PermissionAdmin:
             }
             for name in CAPABILITIES
         ]
+
+
+    # ------------------------------------------------------- standing approvals
+
+    def add_standing_approval(self, payload: dict) -> dict:
+        from app.permissions.standing import create
+
+        agent = self.agents.get(payload["agent_id"])
+        workspace_id = None
+        if payload.get("workspace_id") is not None:
+            workspace_id = workspace_uuid(payload["workspace_id"])
+            if workspace_id is None:
+                raise InvalidWorkspaceIdError()
+            if self.workspaces.get(workspace_id) is None:
+                raise WorkspaceNotFoundError()
+        return create(
+            self.session,
+            registry=self.registry,
+            agent_id=agent.id,
+            tool_name=payload["tool_name"],
+            workspace_id=workspace_id,
+            path_prefix=payload.get("path_prefix"),
+            expires_in_days=payload.get("expires_in_days"),
+        )
+
+    def standing_approvals(self, agent_id: str | None = None) -> list[dict]:
+        from app.permissions.standing import list_for
+
+        canonical = None if agent_id is None else self.agents.get(agent_id).id
+        return list_for(self.session, canonical)
+
+    def revoke_standing_approval(self, approval_id: str) -> bool:
+        from app.permissions.standing import revoke
+
+        return revoke(self.session, approval_id)

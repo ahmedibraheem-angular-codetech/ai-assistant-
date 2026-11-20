@@ -15,6 +15,7 @@ from app.permissions.schemas import (
     PathGrantsUpdate,
     PermissionEvaluateRequest,
     PermissionModeUpdate,
+    StandingApprovalCreate,
     ToolEnabledUpdate,
 )
 from app.tools.exceptions import ToolNotFoundError
@@ -127,3 +128,46 @@ def evaluate_permission(
         resource_id=payload.resource_id,
         relative_path=payload.relative_path,
     )
+
+
+@router.get("/permissions/standing-approvals")
+def list_standing_approvals(
+    agent_id: str | None = None,
+    _local: None = Depends(require_local_admin),
+    admin: PermissionAdmin = Depends(get_permission_admin),
+):
+    try:
+        items = admin.standing_approvals(agent_id)
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidAgentIdError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"standing_approvals": items, "count": len(items)}
+
+
+@router.post("/permissions/standing-approvals", status_code=201)
+def add_standing_approval(
+    payload: StandingApprovalCreate,
+    _local: None = Depends(require_local_admin),
+    admin: PermissionAdmin = Depends(get_permission_admin),
+):
+    from app.permissions.standing import StandingApprovalError
+
+    try:
+        return admin.add_standing_approval(payload.model_dump())
+    except AgentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (InvalidAgentIdError, InvalidWorkspaceIdError, WorkspaceNotFoundError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except StandingApprovalError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/permissions/standing-approvals/{approval_id}", status_code=204)
+def revoke_standing_approval(
+    approval_id: str,
+    _local: None = Depends(require_local_admin),
+    admin: PermissionAdmin = Depends(get_permission_admin),
+):
+    if not admin.revoke_standing_approval(approval_id):
+        raise HTTPException(status_code=404, detail="That standing approval was not found.")

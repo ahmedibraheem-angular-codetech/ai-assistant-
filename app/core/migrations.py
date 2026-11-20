@@ -86,6 +86,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 16:
         upgrade_to_16(engine)
         return
+    if version == 17:
+        upgrade_to_17(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -177,6 +180,13 @@ def upgrade_to_16(engine: Engine) -> None:
     from app.approvals.payloads import McpExecutionPayloadRecord
 
     McpExecutionPayloadRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_17(engine: Engine) -> None:
+    """Add standing approvals for read-only tools. No existing table is rewritten."""
+    from app.permissions.models import StandingApprovalRecord
+
+    StandingApprovalRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

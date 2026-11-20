@@ -32,6 +32,7 @@ _RESTRICTED = "That action is not allowed in restricted mode."
 _INTERNET = "Internet access is not allowed in restricted mode."
 _SAFE = "Allowed by an explicit safe permission."
 _READ = "Allowed by an explicit read permission."
+_STANDING = "Allowed by a standing approval."
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +55,8 @@ class PermissionFacts:
     internet: bool
     approval_required: bool = False
     change_granted: bool = True
+    # A live standing approval matches this agent, read-only tool, and scope.
+    standing_approved: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +113,10 @@ def decide(facts: PermissionFacts) -> PermissionDecision:
         if facts.approval_required:
             if facts.mode == "restricted_auto":
                 return _deny(facts, _RESTRICTED, "restricted")
+            # Standing approvals cover reads in ask_sensitive only. always_ask
+            # (handled above) still asks every time.
+            if facts.mode == "ask_sensitive" and facts.standing_approved:
+                return PermissionDecision(ALLOW, _STANDING, "standing", facts.mode)
             return _approval(facts)
         return _allow(facts, _READ)
     if facts.approval_required:

@@ -380,7 +380,7 @@ def test_migration_from_v1_preserves_agents(tmp_path, monkeypatch):
             grants = connection.execute("SELECT COUNT(*) FROM agent_tool_grants").fetchone()[0]
             workspaces = connection.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0]
             workspace_grants = connection.execute("SELECT COUNT(*) FROM agent_workspace_grants").fetchone()[0]
-        assert versions == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,)]
+        assert versions == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,)]
         assert agent == 1
         assert {
             "conversations",

@@ -82,3 +82,34 @@ class PermissionAuditRecord(Base):
     resource_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
     action: Mapped[str | None] = mapped_column(String(32), nullable=True)
     detail: Mapped[str] = mapped_column(String(180), nullable=False)
+
+
+class StandingApprovalRecord(Base):
+    """A user's standing yes for one agent, one read-only tool, and one scope.
+
+    It replaces the per-call approval for reads only, and only in
+    ask_sensitive mode. It never covers create/write/delete, commands,
+    sensitive tools, or MCP. Only the local user can create it (admin API);
+    tools and model payloads cannot.
+    """
+
+    __tablename__ = "standing_approvals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    workspace_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # Normalized relative path. None means the whole workspace.
+    path_prefix: Mapped[str | None] = mapped_column(String(400), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

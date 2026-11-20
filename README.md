@@ -90,6 +90,25 @@ GitHub Actions workflow `.github/workflows/wp02-linux.yml` runs the WP-02 proces
 security tests on Ubuntu (`ubuntu-latest`), including real `execveat` coverage that
 cannot be verified on macOS alone.
 
+### Standing approvals (reads only)
+
+By default every file read, file search, and web research asks for approval.
+A standing approval is your lasting yes for one agent, one read-only tool, and
+one scope, so the agent can work without asking each time:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/permissions/standing-approvals \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"agent_id":"<agent>","tool_name":"read_file","workspace_id":"<workspace>","path_prefix":"docs","expires_in_days":30}'
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/permissions/standing-approvals
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/permissions/standing-approvals/<id>
+```
+
+Limits: reads only (creating, changing, or deleting files, commands, and
+sensitive tools always ask); only in `ask_sensitive` mode (`always_ask` keeps
+asking); tool, workspace, and path grants still apply; sensitive files such as
+`.env` stay blocked. Every add and revoke is written to the permission audit.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

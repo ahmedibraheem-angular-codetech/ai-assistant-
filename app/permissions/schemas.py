@@ -68,3 +68,15 @@ class PermissionEvaluateRequest(BaseModel):
     resource_id: str | None = Field(default=None, max_length=200)
     action: str = Field(min_length=1, max_length=32)
     relative_path: str | None = Field(default=None, max_length=400)
+
+
+class StandingApprovalCreate(BaseModel):
+    """A lasting yes for reads by one agent. Changes and commands still ask."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str = Field(min_length=1, max_length=64)
+    tool_name: str = Field(min_length=1, max_length=64)
+    workspace_id: str | None = Field(default=None, max_length=64)
+    path_prefix: str | None = Field(default=None, max_length=400)
+    expires_in_days: int | None = Field(default=None, ge=1, le=365)
