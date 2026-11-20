@@ -300,8 +300,14 @@ counted. Budget use is today's in-memory counter (it resets on restart).
 
 ## Mac app (phase 5, in progress)
 
-`desktop/` is an Angular + Tauri 2 app. Slice 1 has the chat page
-(conversation list, history, new chat, server status). Start the server, then:
+`desktop/` is an Angular + Tauri 2 app with a side menu, an analytics home
+page and the chat page. The home page reads `/api/v1/analytics/summary`:
+KPI rings, a map of the assistant with its agents and systems (click a node
+for its numbers), the latest approval actions, an activity chart, the most
+used tools, learning and memory, a range switch (today / 7 days / 30 days),
+and a pause/resume button. It refreshes every 30 seconds. Dark and light
+themes switch from the side menu; all colours are tokens in
+`desktop/src/styles.css`. Start the server, then:
 
 ```bash
 cd desktop
@@ -330,6 +336,14 @@ ASSISTANT_API_PORT=8765 cargo test --test live -- --ignored --nocapture   # live
 ```
 
 The live test sends one real chat and then deletes that conversation.
+
+**Adding a front-end package:** the window runs with `freezePrototype: true`
+(Object.prototype is read-only, a defence against prototype pollution). A
+library that writes to it at load time stops the whole app with no visible
+error. Run `npm run check:freeze` in `desktop/` after adding one. echarts
+fails this check, so charts are plain SVG (`src/app/shared/line-chart.ts`).
+The dev server is pinned to `127.0.0.1:4200`: on some Macs `localhost`
+resolves only to IPv6 and the window would load nothing.
 
 ## Known limits (by design)
 

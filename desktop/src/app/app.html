@@ -1,0 +1,28 @@
+<aside class="side">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span>المساعد</span>
+  </div>
+  <nav aria-label="الأقسام">
+    @for (item of nav; track item.path) {
+      <a
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: item.exact }"
+        ariaCurrentWhenActive="page"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path [attr.d]="item.icon"></path>
+        </svg>
+        {{ item.label }}
+      </a>
+    }
+  </nav>
+  <span class="spacer"></span>
+  <button type="button" class="theme" (click)="theme.toggle()" [attr.aria-label]="theme.theme() === 'dark' ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن'">
+    {{ theme.theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن' }}
+  </button>
+</aside>
+<main class="page">
+  <router-outlet />
+</main>

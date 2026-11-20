@@ -1,0 +1,92 @@
+:host {
+  display: flex;
+  height: 100vh;
+  background: var(--bg);
+}
+
+.side {
+  flex: none;
+  width: 212px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 12px;
+  border-inline-end: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 18px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: conic-gradient(#6e8bff, #3dd6c6, #b07cff, #6e8bff);
+}
+
+nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+}
+
+nav a:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+nav a.active {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.theme {
+  min-height: 44px;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  text-align: start;
+}
+
+.page {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .side {
+    width: 64px;
+    padding-inline: 8px;
+  }
+  .brand span:last-child,
+  .theme {
+    display: none;
+  }
+  nav a {
+    font-size: 0;
+    justify-content: center;
+  }
+}

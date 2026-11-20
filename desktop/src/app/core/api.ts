@@ -1,7 +1,7 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
-import { ChatReply, ConversationList, MessageList } from './models';
+import { AnalyticsRange, AnalyticsSummary, ChatReply, ConversationList, MessageList } from './models';
 
 /**
  * Calls a Tauri command. Injected so tests can replace it.
@@ -93,6 +93,10 @@ export class AssistantApi {
     const body: Record<string, string> = { message };
     if (conversationId) body['conversation_id'] = conversationId;
     return this.request<ChatReply>('POST', '/api/v1/chat', body);
+  }
+
+  analytics(range: AnalyticsRange = '7d'): Promise<AnalyticsSummary> {
+    return this.request<AnalyticsSummary>('GET', `/api/v1/analytics/summary?range=${range}`);
   }
 
   conversations(limit = 50): Promise<ConversationList> {

@@ -1,6 +1,7 @@
 import { Routes, UrlMatchResult, UrlSegment } from '@angular/router';
 
 import { ChatPage } from './chat/chat-page';
+import { DashboardPage } from './dashboard/dashboard-page';
 
 /**
  * Matches `/chat` and `/chat/<id>` with ONE route, so moving from a new chat to
@@ -16,7 +17,7 @@ export function chatMatcher(segments: UrlSegment[]): UrlMatchResult | null {
 }
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'chat' },
+  { path: '', pathMatch: 'full', component: DashboardPage, title: 'لوحة التحليلات' },
   { matcher: chatMatcher, component: ChatPage, title: 'المحادثة' },
-  { path: '**', redirectTo: 'chat' },
+  { path: '**', redirectTo: '' },
 ];

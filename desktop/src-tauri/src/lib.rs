@@ -16,7 +16,14 @@ async fn api_request(
     path: String,
     body: Option<Value>,
 ) -> Result<ApiResponse, String> {
-    api::send(&bridge.http, &bridge.config, &method, &path, body).await
+    // Method and path only: never the body or the token.
+    log::info!("api_request {method} {path}");
+    let result = api::send(&bridge.http, &bridge.config, &method, &path, body).await;
+    match &result {
+        Ok(response) => log::info!("api_request {path} -> {}", response.status),
+        Err(error) => log::warn!("api_request {path} failed: {error}"),
+    }
+    result
 }
 
 /// Public health check, used for the "server online" indicator.

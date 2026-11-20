@@ -46,3 +46,71 @@ export interface MessageList {
   limit: number;
   offset: number;
 }
+
+// Dashboard data (see app/analytics.py).
+
+export type AnalyticsRange = 'today' | '7d' | '30d';
+
+export interface CountWithPrevious {
+  value: number;
+  previous: number;
+}
+
+export interface AgentActivity {
+  id: string;
+  name: string;
+  role: string;
+  enabled: boolean;
+  members: string[];
+  chat_turns: number;
+  tool_actions: number;
+  lessons_pending: number;
+  skills_active: number;
+  study_runs: number;
+  last_active_at: string | null;
+}
+
+export interface QueueItem {
+  id: string;
+  tool: string;
+  agent_id: string | null;
+  agent_name: string | null;
+  description: string;
+  risk: string;
+  status: string;
+  created_at: string | null;
+}
+
+export interface AnalyticsSummary {
+  range: AnalyticsRange;
+  since: string;
+  generated_at: string;
+  paused: boolean;
+  kpis: {
+    chat_turns: CountWithPrevious;
+    conversations: CountWithPrevious;
+    tool_actions: { value: number; completed: number; failed: number; success_rate: number | null };
+    approvals_pending: { value: number; oldest_at: string | null };
+    lessons_new: { value: number; pending: number };
+    budget: { tool_calls_used: number; tool_calls_limit: number; chat_turns_used: number; chat_turns_limit: number };
+  };
+  agents: AgentActivity[];
+  systems: {
+    memories: { count: number; added: number };
+    knowledge: { documents: number; chunks: number };
+    projects: { count: number; entries: number };
+    graph: { entities: number; relations: number };
+    tools: { denied: number };
+  };
+  queue: QueueItem[];
+  trend: { step: 'hour' | 'day'; starts: string[]; chat_turns: number[]; tool_completed: number[]; tool_failed: number[] };
+  tools: { tool: string; actions: number; failed: number; denied: number }[];
+  learning: {
+    lessons_active: number;
+    lessons_pending: number;
+    skills_active: number;
+    skills_candidate: number;
+    study_runs: number;
+    memories_added: number;
+  };
+}
