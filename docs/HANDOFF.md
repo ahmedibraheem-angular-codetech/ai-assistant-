@@ -10,7 +10,7 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 | Repo (on the Mac) | `/Users/a.m.ibraheem/Desktop/local-mac-ai-assistant/personal-ai-assistant` |
 | GitHub | `ahmedibraheem-angular-codetech/ai-assistant-`, branch `wp02-spawn-unreaped-remediation` (all pushed) |
 | Python | `.venv/bin/python` (3.15, macOS venv — use the Mac shell via Desktop Commander, not a Linux VM) |
-| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **552 passed, 12 skipped** |
+| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **555 passed, 12 skipped** |
 | Live Docker tests | `RUN_DOCKER_TESTS=1 ... tests/test_sandbox.py` |
 | Run server | `.venv/bin/python -m app --port 8000` (token: `.venv/bin/python -m app.control_plane token`) |
 | DB | `data/assistant.db`, **schema 25**; backups `data/assistant.db.backup-before-vNN` |
@@ -40,7 +40,7 @@ Done (each slice committed and pushed):
 Lessons from this phase (keep):
 - The window runs with `freezePrototype: true`. echarts breaks it silently (the app never starts); charts are plain SVG. Run `npm run check:freeze` for any new package.
 - `localhost:4200` resolved to IPv6 only and the window loaded nothing; dev server and devUrl are pinned to 127.0.0.1.
-- A chat turn keeps a write transaction open while the model answers. Any other writer at that moment (approve, pause) can still wait up to 30 s or fail; chat-vs-chat is serialized, the rest is a known limit to fix by committing the user message before the model call.
+- A chat turn must never hold SQLite's write lock while a model answers: the user message is committed before the model call, tool writes are committed after each run, and a failed turn deletes what it committed early (no half turn). Chat turns are serialized. Pause answers in ~50 ms during a turn; it blocks tools and new turns but lets an in-flight model reply finish.
 - Computer use is not set up on the Mac, so the window cannot be screenshotted; verify through the server log or the built-in browser at 127.0.0.1:4200.
 
 ## Next: phase 5 — remaining slices

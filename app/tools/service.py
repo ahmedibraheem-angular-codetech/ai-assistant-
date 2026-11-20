@@ -181,6 +181,11 @@ class ToolService:
                     break
                 seen_calls.add(call_signature)
                 outcome = await self._dispatch(call, agent_id)
+                # Commit what the tool wrote (run log, audit, approval request)
+                # before the next model call, so the turn never holds SQLite's
+                # write lock while the model thinks. What a tool did stays on
+                # record even if the turn fails later.
+                self.grants.session.commit()
                 used += 1
                 transcript.append({"role": "user", "content": outcome.model_text()})
             if repeated:

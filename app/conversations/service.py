@@ -141,6 +141,8 @@ class ConversationService:
         routing_reason = None
         routing_confidence = None
 
+        created_conversation_id: str | None = None
+        user_message_id: str | None = None
         try:
             now = datetime.now(timezone.utc)
             conversation = existing
@@ -151,6 +153,8 @@ class ConversationService:
                     agent_id=agent.id if agent is not None else None,
                     created_at=now,
                 )
+                created_conversation_id = conversation.id
+                self._release_write_lock()  # routing below may call a model
             memory_intent = None
             memory_action_id = None
             confirmation_required = None
@@ -197,7 +201,10 @@ class ConversationService:
                             routing_confidence = outcome.confidence
                 if clarify_text is None and agent is None:
                     model, prompt = _execution_inputs(None, system_prompt)
-                self._add_user_message(conversation.id, message, agent.id if agent is not None else None, now)
+                user_message_id = self._add_user_message(
+                    conversation.id, message, agent.id if agent is not None else None, now
+                )
+                self._release_write_lock()  # the model call below can take minutes
                 history = self._context_history(conversation.id)
                 if clarify_text is not None:
                     answer = clarify_text
@@ -243,12 +250,15 @@ class ConversationService:
             self.repository.session.commit()
         except IntegrityError as exc:
             self.repository.session.rollback()
+            self._undo_partial_turn(created_conversation_id, user_message_id)
             raise ConversationPersistenceError() from exc
         except SQLAlchemyError as exc:
             self.repository.session.rollback()
+            self._undo_partial_turn(created_conversation_id, user_message_id)
             raise ConversationPersistenceError() from exc
-        except Exception:
+        except BaseException:
             self.repository.session.rollback()
+            self._undo_partial_turn(created_conversation_id, user_message_id)
             raise
 
         return ChatTurnResult(
@@ -268,9 +278,10 @@ class ConversationService:
             routing_confidence=routing_confidence,
         )
 
-    def _add_user_message(self, conversation_id: str, message: str, agent_id: str | None, created_at: datetime) -> None:
+    def _add_user_message(self, conversation_id: str, message: str, agent_id: str | None, created_at: datetime) -> str:
+        message_id = str(uuid4())
         self.repository.add_message(
-            message_id=str(uuid4()),
+            message_id=message_id,
             conversation_id=conversation_id,
             role="user",
             content=message,
@@ -278,6 +289,33 @@ class ConversationService:
             model=None,
             created_at=created_at,
         )
+        return message_id
+
+    def _release_write_lock(self) -> None:
+        """Commit what the turn wrote so far, before waiting on a model.
+
+        SQLite has one writer. Holding this transaction open across a model
+        call made the pause switch and approvals wait for the whole turn.
+        """
+        self.repository.session.commit()
+
+    def _undo_partial_turn(self, conversation_id: str | None, message_id: str | None) -> None:
+        """A failed turn leaves no half turn: remove what was committed early."""
+        from app.conversations.models import MessageRecord
+
+        if conversation_id is None and message_id is None:
+            return
+        session = self.repository.session
+        try:
+            if conversation_id is not None:
+                self.repository.delete(conversation_id)
+            elif message_id is not None:
+                record = session.get(MessageRecord, message_id)
+                if record is not None:
+                    session.delete(record)
+            session.commit()
+        except SQLAlchemyError:
+            session.rollback()
 
     def _apply_new_route(
         self,
