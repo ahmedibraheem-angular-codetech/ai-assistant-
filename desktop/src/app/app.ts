@@ -2,6 +2,8 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApprovalsStore } from './core/approvals-store';
+import { WINDOW_LABEL } from './core/desktop';
+import { QuickPage } from './quick/quick-page';
 import { ThemeService } from './core/theme';
 
 interface NavItem {
@@ -11,16 +13,18 @@ interface NavItem {
   exact: boolean;
 }
 
-/** App shell: side menu + the current page. Only pages that work are listed. */
+/** App shell: side menu + the current page, or the quick page in the ⌥ Space window. */
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, QuickPage],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
   readonly theme = inject(ThemeService);
   readonly approvals = inject(ApprovalsStore);
+  /** The ⌥ Space window shows only the quick page, without the side menu. */
+  readonly quick = inject(WINDOW_LABEL) === 'quick';
 
   constructor() {
     this.approvals.start();

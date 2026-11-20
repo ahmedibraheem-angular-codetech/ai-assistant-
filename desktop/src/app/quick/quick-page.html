@@ -1,0 +1,41 @@
+<header class="head">
+  <span class="orb" aria-hidden="true"></span>
+  <div class="title">
+    <strong>المساعد</strong>
+    <span class="small muted">{{ sending() ? 'يفكر…' : 'جاهز · ⌥ Space' }}</span>
+  </div>
+  @if (approvals.pending().length) {
+    <button type="button" class="badge" (click)="open('/approvals')">{{ approvals.pending().length }} موافقة</button>
+  }
+</header>
+
+<section class="thread" aria-live="polite">
+  @for (x of exchanges(); track $index) {
+    <p class="q" dir="auto">{{ x.question }}</p>
+    @if (x.pending) {
+      <p class="a thinking" aria-label="المساعد يفكر"><span></span><span></span><span></span></p>
+    } @else {
+      <p class="a" [class.failed]="x.failed" dir="auto">{{ x.answer }}</p>
+    }
+  } @empty {
+    <div class="hello">
+      <p>اسأل أي شيء، أو اختر اختصاراً.</p>
+      <p class="small muted">Enter للإرسال · ⌘ Enter للمتابعة في النافذة الكاملة · Esc للإخفاء</p>
+    </div>
+  }
+</section>
+
+<div class="chips">
+  @for (s of suggestions; track s.label) {
+    <button type="button" [disabled]="sending()" (click)="ask(s.prompt)">{{ s.label }}</button>
+  }
+  <button type="button" (click)="open('/approvals')">الموافقات</button>
+  <button type="button" (click)="open('/')">افتح المساعد</button>
+</div>
+
+<form class="composer" (submit)="$event.preventDefault(); ask()">
+  <label for="quick-input" class="visually-hidden">سؤال سريع</label>
+  <textarea #input id="quick-input" name="q" rows="2" dir="auto" autofocus placeholder="اسأل أو أعطِ أمراً…"
+    [ngModel]="draft()" (ngModelChange)="draft.set($event)" (keydown)="onKeydown($event)"></textarea>
+  <button type="submit" class="send" [disabled]="sending() || !draft().trim()" aria-label="أرسل">↑</button>
+</form>

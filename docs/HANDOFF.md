@@ -14,7 +14,7 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 | Live Docker tests | `RUN_DOCKER_TESTS=1 ... tests/test_sandbox.py` |
 | Run server | `.venv/bin/python -m app --port 8000` (token: `.venv/bin/python -m app.control_plane token`) |
 | DB | `data/assistant.db`, **schema 25**; backups `data/assistant.db.backup-before-vNN` |
-| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **89 passed**; `cd src-tauri && cargo test` → **14 passed**; `npm run check:freeze` after adding a package |
+| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **95 passed**; `cd src-tauri && cargo test` → **16 passed**; `npm run check:freeze` after adding a package |
 | Run app | server first, then `cd desktop && ASSISTANT_API_PORT=8765 npx tauri dev` (dev server pinned to 127.0.0.1:4200) |
 | Old design/review docs | `~/.cursor/projects/Users-a-m-ibraheem-Desktop-local-mac-ai-assistant-personal-ai-assistant/agent-tools/` |
 
@@ -37,6 +37,7 @@ Done (each slice committed and pushed):
 - **Slice 4** team page, hiring from templates, agent profile (review lessons/skills, evaluations, study plan, team members, stop/start).
 - **Slice 5** customize page for the home widgets (show/hide, order, density, motion), saved locally.
 - **Slice 6** projects (brief, tasks, entries, archive), knowledge graph (entities, neighbour drawing, relations), study digest on the team page.
+- **Slice 7** desktop shell: ⌥ Space quick window, Menu Bar menu (open, quick, approvals, pause/resume, launch at login, quit), close hides. All in Rust (`desktop.rs`); the tray icon is declared in `tauri.conf.json` because `tauri dev` rewrites Cargo features from the config.
 - **Fix** concurrent chat turns returned 500 (SQLite single writer while a turn holds its transaction): one chat turn at a time per server.
 - **Schema 25** `tool_runs` log (every started run; written in the bound session during a turn); analytics read it.
 
@@ -55,8 +56,7 @@ budgets, standing approvals, hiring). Talks to the local API with the Bearer
 token (read the token file through a Tauri command; never ship it in the web
 bundle). Rust/cargo is installed. Needs npm downloads.
 
-Remaining slices: floating
-window, shortcut, Menu Bar, autostart; packaging.
+Remaining slices: packaging (signed .app/.dmg), then phase 6.
 Later: 6 voice + mobile, 7 automation (n8n, browser, proactive tasks),
 8 optional LoRA fine-tuning, 9 hardening.
 

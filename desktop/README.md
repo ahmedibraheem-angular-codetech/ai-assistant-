@@ -27,8 +27,10 @@ Layout:
 - `src/app/chat/`: chat page (`/chat`, `/chat/<id>`, one route, so the page is not rebuilt).
 - `src/app/core/api.ts`: the only way to reach the API (Tauri `api_request`).
 - `src/app/core/theme.ts` + `src/styles.css`: dark/light tokens.
+- `src-tauri/src/desktop.rs`: quick window, ⌥ Space, Menu Bar menu, launch at login (the tray icon itself is `app.trayIcon` in tauri.conf.json, which also keeps the `tray-icon` feature on).
+- `src/app/quick/`: the quick window's page (the app shows it when the window label is `quick`).
 - `src-tauri/src/api.rs`: token reading and the loopback HTTP call.
-- `src-tauri/capabilities/default.json`: the window can call only `api_request` and `api_health`.
+- `src-tauri/capabilities/default.json`: both windows can call `api_request` and `api_health`, plus `hide_quick` and `open_main` (routes from a fixed list).
 
 `freezePrototype` is on in `tauri.conf.json`. A package that writes to
 Object.prototype when it loads breaks the app silently; `npm run check:freeze`

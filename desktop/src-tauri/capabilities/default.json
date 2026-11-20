@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core defaults plus the two API bridge commands.",
-  "windows": ["main"],
-  "permissions": ["core:default", "allow-api-request", "allow-api-health"]
+  "description": "Both windows: core defaults, the API bridge, and the quick window's two commands (hide itself, open an allowed page in the main window).",
+  "windows": ["main", "quick"],
+  "permissions": ["core:default", "allow-api-request", "allow-api-health", "allow-hide-quick", "allow-open-main"]
 }

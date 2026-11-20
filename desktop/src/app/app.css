@@ -4,6 +4,10 @@
   background: var(--bg);
 }
 
+app-quick-page {
+  flex: 1;
+}
+
 .side {
   flex: none;
   width: 212px;

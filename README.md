@@ -323,6 +323,16 @@ reject), active skills with their steps, active lessons, recent evaluations,
 the study plan (topics, interval, "study now") and the team members it may
 delegate to; it can also stop or start the agent.
 
+**Desktop shell:** ⌥ Space opens a small quick window from anywhere (ask
+one thing, shortcuts to approvals and the full app, ⌘ Enter continues the
+conversation in the main window, Esc or clicking elsewhere hides it). A Menu
+Bar icon opens the app, the quick window or approvals, pauses or resumes the
+assistant, and toggles launch at login (off until you turn it on). Closing
+the main window only hides it; quit from the Menu Bar. All of this runs in
+Rust (`desktop/src-tauri/src/desktop.rs`): no extra JavaScript packages, and
+the quick window may only open pages from a fixed list. In development,
+launch at login would register the debug build, so leave it off there.
+
 **Projects** (`/projects`) shows each project's brief (current status, open
 tasks you can tick done, recent decisions and notes), adds entries of any
 kind, creates and archives projects. **Knowledge** (`/knowledge`) lists graph

@@ -1,11 +1,12 @@
 pub mod api;
+pub mod desktop;
 
 use api::{ApiConfig, ApiResponse};
 use serde_json::Value;
 
-struct Bridge {
-    config: ApiConfig,
-    http: reqwest::Client,
+pub struct Bridge {
+    pub config: ApiConfig,
+    pub http: reqwest::Client,
 }
 
 /// The only way the web view reaches the API. The token stays in Rust.
@@ -40,8 +41,9 @@ pub fn run() {
     };
     tauri::Builder::default()
         .manage(bridge)
-        .invoke_handler(tauri::generate_handler![api_request, api_health])
+        .invoke_handler(tauri::generate_handler![api_request, api_health, desktop::hide_quick, desktop::open_main])
         .setup(|app| {
+            // Logging first, so warnings from the desktop setup are not lost.
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -49,6 +51,8 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            desktop::setup(app)?;
+            log::info!("desktop ready: quick window, Menu Bar icon, shortcut");
             Ok(())
         })
         .run(tauri::generate_context!())

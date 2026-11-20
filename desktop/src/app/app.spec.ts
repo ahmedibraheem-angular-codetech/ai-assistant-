@@ -4,6 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { App } from './app';
 import { routes } from './app.routes';
 import { TAURI_INVOKE } from './core/api';
+import { WINDOW_LABEL } from './core/desktop';
 import { ThemeService } from './core/theme';
 
 describe('App', () => {
@@ -44,5 +45,14 @@ describe('App', () => {
     expect(theme.theme()).not.toBe(start);
     expect(document.documentElement.dataset['theme']).toBe(theme.theme());
     theme.set(start);
+  });
+
+  it('the quick window shows only the quick page, without the side menu', () => {
+    TestBed.overrideProvider(WINDOW_LABEL, { useValue: 'quick' });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('app-quick-page')).toBeTruthy();
+    expect(el.querySelector('nav')).toBeNull();
   });
 });

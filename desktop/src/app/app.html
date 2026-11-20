@@ -1,3 +1,6 @@
+@if (quick) {
+  <app-quick-page />
+} @else {
 <aside class="side">
   <div class="brand">
     <span class="mark" aria-hidden="true"></span>
@@ -29,3 +32,4 @@
 <main class="page">
   <router-outlet />
 </main>
+}

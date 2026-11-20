@@ -13,7 +13,7 @@ Object.freeze(Object.prototype);
 
 const { dependencies } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const skip = new Set(['tslib']); // helper library, loaded through the others
-const extra = ['@tauri-apps/api/core']; // entry points we import directly
+const extra = ['@tauri-apps/api/core', '@tauri-apps/api/window']; // entry points we import directly
 
 // Angular's packages are partly compiled and need the compiler loaded first
 // when imported straight into Node (the app build does this ahead of time).
