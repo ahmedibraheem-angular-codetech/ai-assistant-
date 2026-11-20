@@ -378,6 +378,22 @@ ASSISTANT_API_PORT=8765 cargo test --test live -- --ignored --nocapture   # live
 
 The live test sends one real chat and then deletes that conversation.
 
+**Building the app:**
+
+```bash
+cd desktop && npm run dist
+# desktop/src-tauri/target/release/bundle/macos/Personal Assistant.app
+# desktop/src-tauri/target/release/bundle/dmg/Personal Assistant_0.1.0_aarch64.dmg
+```
+
+The build is signed ad-hoc (`signingIdentity: "-"`, hardened runtime): it
+runs on the Mac that built it. Giving it to someone else needs an Apple
+Developer ID certificate and notarization (set `signingIdentity` and the
+`APPLE_*` variables). The built app talks to the server on port **8000**
+and reads the token from this repository's `data/` folder (the path is fixed
+at build time), so start the server with `.venv/bin/python -m app` first.
+Turn on "launch at login" from the Menu Bar of the built app, not the dev one.
+
 **Adding a front-end package:** the window runs with `freezePrototype: true`
 (Object.prototype is read-only, a defence against prototype pollution). A
 library that writes to it at load time stops the whole app with no visible

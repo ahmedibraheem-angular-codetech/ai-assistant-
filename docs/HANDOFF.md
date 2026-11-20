@@ -38,6 +38,7 @@ Done (each slice committed and pushed):
 - **Slice 5** customize page for the home widgets (show/hide, order, density, motion), saved locally.
 - **Slice 6** projects (brief, tasks, entries, archive), knowledge graph (entities, neighbour drawing, relations), study digest on the team page.
 - **Slice 7** desktop shell: ⌥ Space quick window, Menu Bar menu (open, quick, approvals, pause/resume, launch at login, quit), close hides. All in Rust (`desktop.rs`); the tray icon is declared in `tauri.conf.json` because `tauri dev` rewrites Cargo features from the config.
+- **Slice 8** packaging: `npm run dist` → `Personal Assistant.app` + `.dmg`, ad-hoc signed (no Developer ID on this Mac), hardened runtime. The built app uses port 8000 and the repo's `data/` (path fixed at build time).
 - **Fix** concurrent chat turns returned 500 (SQLite single writer while a turn holds its transaction): one chat turn at a time per server.
 - **Schema 25** `tool_runs` log (every started run; written in the bound session during a turn); analytics read it.
 
@@ -56,7 +57,7 @@ budgets, standing approvals, hiring). Talks to the local API with the Bearer
 token (read the token file through a Tauri command; never ship it in the web
 bundle). Rust/cargo is installed. Needs npm downloads.
 
-Remaining slices: packaging (signed .app/.dmg), then phase 6.
+Phase 5 is done. Open items: Developer ID signing + notarization if the app is shared; the app does not start the Python server itself yet (a later hardening item).
 Later: 6 voice + mobile, 7 automation (n8n, browser, proactive tasks),
 8 optional LoRA fine-tuning, 9 hardening.
 

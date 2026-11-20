@@ -38,7 +38,8 @@
   "bundle": {
     "active": true,
     "targets": [
-      "app"
+      "app",
+      "dmg"
     ],
     "category": "Productivity",
     "icon": [
@@ -47,6 +48,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "shortDescription": "مساعد شخصي محلي",
+    "copyright": "Ahmed Ibraheem",
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": true
+    }
   }
 }
