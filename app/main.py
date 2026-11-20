@@ -12,6 +12,7 @@ from app.api.routes import (
     health,
     memories,
     permissions,
+    projects,
     tools,
     workspaces,
 )
@@ -97,3 +98,4 @@ app.include_router(permissions.router, prefix=settings.api_prefix, tags=["Permis
 app.include_router(approvals.router, prefix=settings.api_prefix, tags=["Approvals"])
 app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recoveries"])
 app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])
+app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"])

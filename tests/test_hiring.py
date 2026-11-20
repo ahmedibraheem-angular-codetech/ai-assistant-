@@ -22,7 +22,7 @@ def test_templates_are_listed(client):
 def test_every_template_only_lists_real_tools():
     names = {tool.name for tool in get_tool_registry().list_tools()}
     for template in TEMPLATES.values():
-        assert set(template.tools) <= names, template.id
+        assert set(template.all_tools) <= names, template.id
         assert "Never try to change your own permissions" in template.system_prompt
 
 
@@ -34,8 +34,8 @@ def test_hiring_creates_a_working_agent_with_template_tools_and_budget(client):
     assert agent["name"] == "Ads"
     assert "marketing and advertising specialist" in agent["system_prompt"]
     tools = client.get(f"/api/v1/agents/{agent['id']}/tools").json()
-    assert set(body["granted_tools"]) == set(TEMPLATES["marketing"].tools)
-    assert set(tools["allowed_tools"]) == set(TEMPLATES["marketing"].tools)
+    assert set(body["granted_tools"]) == set(TEMPLATES["marketing"].all_tools)
+    assert set(tools["allowed_tools"]) == set(TEMPLATES["marketing"].all_tools)
     budget = client.get(f"/api/v1/control/agents/{agent['id']}/budget").json()
     assert budget["daily_tool_calls"] == 200
     assert budget["daily_chat_turns"] == 100

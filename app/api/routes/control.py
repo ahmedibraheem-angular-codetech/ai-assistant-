@@ -178,7 +178,7 @@ def hire_agent(
     if payload.extra_instructions and payload.extra_instructions.strip():
         prompt = f"{prompt}\n\nExtra instructions from the user:\n{payload.extra_instructions.strip()}"
     registry = get_tool_registry()
-    granted = [name for name in template.tools if registry.get(name) is not None]
+    granted = [name for name in template.all_tools if registry.get(name) is not None]
     try:
         agent = agents.create(
             AgentCreate(

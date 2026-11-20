@@ -8,6 +8,7 @@ from app.tools.calculator import CalculatorTool
 from app.tools.datetime_tool import DateTimeTool
 from app.tools.registry import ToolRegistry
 from app.tools.sandbox import RunCodeTool
+from app.projects.core import ProjectBriefTool, RecordProjectEntryTool
 from app.tools.web_search import DuckDuckGoSearchProvider, WebSearchTool
 
 
@@ -19,6 +20,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         ResearchTool(),
         DelegateTaskTool(),
         RunCodeTool(),
+        ProjectBriefTool(),
+        RecordProjectEntryTool(),
         *builtin_file_tools(),
         *builtin_command_tools(),
         *builtin_knowledge_tools(),

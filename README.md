@@ -170,6 +170,23 @@ container has no network, no access to your files, a read-only filesystem, a
 non-root user, no capabilities, memory/CPU/process limits, a timeout, and an
 output cap, and it is deleted after the run. Live tests: `RUN_DOCKER_TESTS=1 pytest tests/test_sandbox.py`.
 
+### Project memory
+
+Each project keeps decisions, tasks, notes, and the current status, so an
+agent can resume work ("كمل اللي كنا فيه") without a re-explanation:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/projects -d '{"name":"Website","description":"..."}'
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/projects/website/entries -d '{"kind":"decision","text":"..."}'
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/projects/website/brief
+```
+
+Agents use `project_brief` (read) and `record_project_entry` (append-only:
+add entries or mark a task done; no edit or delete). Agent entries are labeled
+and you can delete any entry. Hired agents get both tools.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is
