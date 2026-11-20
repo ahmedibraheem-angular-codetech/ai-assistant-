@@ -1,0 +1,57 @@
+<header class="top">
+  <a routerLink="/" class="back" aria-label="رجوع للرئيسية">→</a>
+  <div class="title">
+    <h1>تخصيص الرئيسية</h1>
+    <p class="muted">اختر الأقسام التي تظهر وترتيبها. يُحفظ كل تغيير فوراً على هذا الجهاز.</p>
+  </div>
+  <button type="button" (click)="layout.reset()">استعد الافتراضي</button>
+</header>
+
+<div class="split">
+  <section class="card" aria-labelledby="sec-h">
+    <div class="card-head">
+      <h2 id="sec-h">الأقسام</h2>
+      <span class="small muted">{{ shownCount() }} من {{ total }} ظاهرة</span>
+    </div>
+    @for (r of rows(); track r.id) {
+      <div class="row" [class.off]="!r.on">
+        <input class="switch" type="checkbox" [id]="'w-' + r.id" [checked]="r.on" (change)="toggle(r.id)">
+        <label [for]="'w-' + r.id" class="grow">
+          <span>{{ r.name }}</span>
+          <span class="small muted">{{ r.hint }}</span>
+        </label>
+        <button type="button" class="icon" [disabled]="r.first" [attr.aria-label]="'حرّك ' + r.name + ' لأعلى'" (click)="move(r.id, -1)">↑</button>
+        <button type="button" class="icon" [disabled]="r.last" [attr.aria-label]="'حرّك ' + r.name + ' لأسفل'" (click)="move(r.id, 1)">↓</button>
+      </div>
+    }
+  </section>
+
+  <div class="side">
+    <section class="card" aria-labelledby="look-h">
+      <h2 id="look-h">الشكل</h2>
+      <span class="small muted">الكثافة</span>
+      <div class="segmented" role="group" aria-label="الكثافة">
+        <button type="button" [attr.aria-pressed]="layout.layout().density === 'comfy'" (click)="layout.setDensity('comfy')">مريحة</button>
+        <button type="button" [attr.aria-pressed]="layout.layout().density === 'compact'" (click)="layout.setDensity('compact')">مضغوطة</button>
+      </div>
+      <div class="row plain">
+        <input class="switch" type="checkbox" id="motion" [checked]="layout.layout().motion" (change)="layout.setMotion(!layout.layout().motion)">
+        <label for="motion" class="grow">
+          <span>الحركة</span>
+          <span class="small muted">نبض الكرة وتدفق الخطوط في الخريطة</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="prev-h">
+      <h2 id="prev-h">المعاينة</h2>
+      <div class="preview" [class.compact]="layout.layout().density === 'compact'" aria-hidden="true">
+        @for (w of layout.visible(); track w.id) {
+          <div class="tile" [style.--span]="w.span" [class.hero]="w.id === 'map'">{{ w.name }}</div>
+        } @empty {
+          <p class="small muted">الرئيسية ستكون فارغة.</p>
+        }
+      </div>
+    </section>
+  </div>
+</div>

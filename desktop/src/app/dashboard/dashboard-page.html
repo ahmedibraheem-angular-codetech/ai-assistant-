@@ -15,6 +15,7 @@
       <button type="button" [attr.aria-pressed]="range() === r.id" (click)="pickRange(r.id)">{{ r.label }}</button>
     }
   </div>
+  <a routerLink="/customize" class="customize">تخصيص</a>
   <button type="button" class="pause" [class.paused]="summary()?.paused" [disabled]="busy() || !summary()" (click)="togglePause()">
     {{ summary()?.paused ? 'استئناف' : 'إيقاف مؤقت' }}
   </button>
@@ -27,123 +28,139 @@
 @if (!summary()) {
   <p class="muted center" role="status">{{ loading() ? 'جارٍ تحميل التحليلات…' : 'لا توجد بيانات.' }}</p>
 } @else {
-  <section class="kpis" aria-label="المؤشرات">
-    @for (k of kpis(); track k.id) {
-      <article class="card kpi" [class]="'tone-' + k.tone">
-        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-          <circle cx="32" cy="32" r="26" class="track"></circle>
-          <circle cx="32" cy="32" r="26" class="fill" [attr.stroke-dasharray]="k.dash" transform="rotate(-90 32 32)"></circle>
-          <text x="32" y="37" text-anchor="middle">{{ k.ringText }}</text>
-        </svg>
-        <div class="kpi-text">
-          <span class="muted small">{{ k.label }}</span>
-          <strong class="big">{{ k.value }}</strong>
-          <span class="small" [class]="'text-' + k.noteTone">{{ k.note }}</span>
-        </div>
-      </article>
-    }
-  </section>
-
-  <section class="middle">
-    <article class="card map-card" aria-labelledby="map-h">
-      <div class="card-head">
-        <h2 id="map-h">خريطة المساعد</h2>
-        <div class="legend small muted">
-          <span><i class="dot tone-violet"></i>وكلاء</span>
-          <span><i class="dot tone-teal"></i>أنظمة</span>
-          <span><i class="dot tone-warn"></i>تحتاج انتباهك</span>
-        </div>
-      </div>
-      <div class="map">
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <ellipse cx="50" cy="50" rx="24" ry="26" class="orbit"></ellipse>
-          <ellipse cx="50" cy="50" rx="38" ry="38" class="orbit"></ellipse>
-          @for (n of map().nodes; track n.id) {
-            <line x1="50" y1="50" [attr.x2]="n.x" [attr.y2]="n.y" [class]="'link kind-' + n.kind" [class.flow]="n.active"></line>
+  <div class="widgets" [class.compact]="layout.layout().density === 'compact'" [class.still]="!layout.layout().motion">
+    @for (w of layout.visible(); track w.id) {
+      <div class="widget" [style.--span]="w.span" [attr.data-widget]="w.id">
+        @switch (w.id) {
+          @case ('kpis') {
+            <section class="kpis" aria-label="المؤشرات">
+              @for (k of kpis(); track k.id) {
+                <article class="card kpi" [class]="'tone-' + k.tone">
+                  <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+                    <circle cx="32" cy="32" r="26" class="track"></circle>
+                    <circle cx="32" cy="32" r="26" class="fill" [attr.stroke-dasharray]="k.dash" transform="rotate(-90 32 32)"></circle>
+                    <text x="32" y="37" text-anchor="middle">{{ k.ringText }}</text>
+                  </svg>
+                  <div class="kpi-text">
+                    <span class="muted small">{{ k.label }}</span>
+                    <strong class="big">{{ k.value }}</strong>
+                    <span class="small" [class]="'text-' + k.noteTone">{{ k.note }}</span>
+                  </div>
+                </article>
+              }
+            </section>
           }
-        </svg>
-        <div class="hub" aria-hidden="true"><div class="pulse"></div><div class="glow"></div><div class="orb"></div></div>
-        @for (n of map().nodes; track n.id) {
-          <button
-            type="button"
-            class="node"
-            [class]="'node kind-' + n.kind"
-            [style.left.%]="n.x"
-            [style.top.%]="n.y"
-            [attr.aria-pressed]="selectedNode()?.id === n.id"
-            (click)="pick(n.id)"
-          >
-            <i class="dot"></i>
-            <span class="node-text"><span>{{ n.label }}</span><span class="small muted">{{ n.stat }}</span></span>
-          </button>
+          @case ('map') {
+            <article class="card map-card" aria-labelledby="map-h">
+              <div class="card-head">
+                <h2 id="map-h">خريطة المساعد</h2>
+                <div class="legend small muted">
+                  <span><i class="dot tone-violet"></i>وكلاء</span>
+                  <span><i class="dot tone-teal"></i>أنظمة</span>
+                  <span><i class="dot tone-warn"></i>تحتاج انتباهك</span>
+                </div>
+              </div>
+              <div class="map">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                  <ellipse cx="50" cy="50" rx="24" ry="26" class="orbit"></ellipse>
+                  <ellipse cx="50" cy="50" rx="38" ry="38" class="orbit"></ellipse>
+                  @for (n of map().nodes; track n.id) {
+                    <line x1="50" y1="50" [attr.x2]="n.x" [attr.y2]="n.y" [class]="'link kind-' + n.kind" [class.flow]="n.active"></line>
+                  }
+                </svg>
+                <div class="hub" aria-hidden="true"><div class="pulse"></div><div class="glow"></div><div class="orb"></div></div>
+                @for (n of map().nodes; track n.id) {
+                  <button
+                    type="button"
+                    class="node"
+                    [class]="'node kind-' + n.kind"
+                    [style.left.%]="n.x"
+                    [style.top.%]="n.y"
+                    [attr.aria-pressed]="selectedNode()?.id === n.id"
+                    (click)="pick(n.id)"
+                  >
+                    <i class="dot"></i>
+                    <span class="node-text"><span>{{ n.label }}</span><span class="small muted">{{ n.stat }}</span></span>
+                  </button>
+                }
+              </div>
+              @if (selectedNode(); as sel) {
+                <div class="facts" role="status">
+                  <strong>{{ sel.label }}</strong>
+                  @for (f of sel.facts; track f.label) {
+                    <span class="small muted">{{ f.label }} <b>{{ f.value }}</b></span>
+                  }
+                  @if (map().hiddenAgents) {
+                    <a routerLink="/team" class="small push">+{{ map().hiddenAgents }} وكيل آخر في صفحة الفريق</a>
+                  }
+                </div>
+              }
+            </article>
+          }
+          @case ('queue') {
+            <article class="card queue" aria-labelledby="q-h">
+              <div class="card-head"><h2 id="q-h">آخر الإجراءات</h2><a routerLink="/approvals" class="small">افتح الموافقات</a></div>
+              @for (q of queue(); track q.id) {
+                <div class="row" [class]="'row tone-' + q.tone">
+                  <span class="initial" aria-hidden="true">{{ q.initial }}</span>
+                  <span class="row-text">
+                    <span class="ellipsis" dir="auto">{{ q.title }}</span>
+                    <span class="small muted ellipsis">{{ q.who }} · {{ q.when }}</span>
+                  </span>
+                  <span class="badge">{{ q.status }}</span>
+                </div>
+              } @empty {
+                <div class="empty">
+                  <p>لا توجد إجراءات بعد.</p>
+                  <p class="small muted">عندما يطلب وكيل تشغيل أداة تحتاج موافقة، تظهر هنا.</p>
+                  <a routerLink="/chat">ابدأ محادثة</a>
+                </div>
+              }
+            </article>
+          }
+          @case ('trend') {
+            <article class="card" aria-labelledby="t-h">
+              <div class="card-head"><h2 id="t-h">النشاط عبر الوقت</h2></div>
+              @if (hasTrend()) {
+                <app-line-chart [labels]="trendLabels()" [series]="trend()" caption="ردود المساعد والإجراءات خلال الفترة"></app-line-chart>
+              } @else {
+                <p class="empty small muted">لا نشاط في هذه الفترة.</p>
+              }
+            </article>
+          }
+          @case ('tools') {
+            <article class="card" aria-labelledby="tools-h">
+              <div class="card-head"><h2 id="tools-h">أكثر الأدوات استخداماً</h2></div>
+              @for (t of tools(); track t.tool) {
+                <div class="bar">
+                  <div class="bar-head small"><span class="mono">{{ t.tool }}</span><span class="muted">{{ t.total }}@if (t.time) { · {{ t.time }}}</span></div>
+                  <div class="bar-track"><div class="bar-fill" [style.width.%]="t.width"></div></div>
+                </div>
+              } @empty {
+                <p class="empty small muted">لا استخدام للأدوات في هذه الفترة.</p>
+              }
+            </article>
+          }
+          @case ('learning') {
+            @if (summary(); as s) {
+              <article class="card" aria-labelledby="l-h">
+                <div class="card-head"><h2 id="l-h">التعلم والذاكرة</h2></div>
+                <div class="tiles">
+                  <div class="tile"><span class="small muted">دروس معتمدة</span><strong>{{ fmt(s.learning.lessons_active) }}</strong></div>
+                  <div class="tile"><span class="small muted">بانتظار المراجعة</span><strong [class.text-warn]="s.learning.lessons_pending">{{ fmt(s.learning.lessons_pending) }}</strong></div>
+                  <div class="tile"><span class="small muted">مهارات نشطة</span><strong>{{ fmt(s.learning.skills_active) }}</strong></div>
+                  <div class="tile"><span class="small muted">ذكريات جديدة</span><strong>{{ fmt(s.learning.memories_added) }}</strong></div>
+                </div>
+              </article>
+            }
+          }
         }
       </div>
-      @if (selectedNode(); as sel) {
-        <div class="facts" role="status">
-          <strong>{{ sel.label }}</strong>
-          @for (f of sel.facts; track f.label) {
-            <span class="small muted">{{ f.label }} <b>{{ f.value }}</b></span>
-          }
-          @if (map().hiddenAgents) {
-            <a routerLink="/team" class="small push">+{{ map().hiddenAgents }} وكيل آخر في صفحة الفريق</a>
-          }
-        </div>
-      }
-    </article>
-
-    <article class="card queue" aria-labelledby="q-h">
-      <div class="card-head"><h2 id="q-h">آخر الإجراءات</h2><a routerLink="/approvals" class="small">افتح الموافقات</a></div>
-      @for (q of queue(); track q.id) {
-        <div class="row" [class]="'row tone-' + q.tone">
-          <span class="initial" aria-hidden="true">{{ q.initial }}</span>
-          <span class="row-text">
-            <span class="ellipsis" dir="auto">{{ q.title }}</span>
-            <span class="small muted ellipsis">{{ q.who }} · {{ q.when }}</span>
-          </span>
-          <span class="badge">{{ q.status }}</span>
-        </div>
-      } @empty {
-        <div class="empty">
-          <p>لا توجد إجراءات بعد.</p>
-          <p class="small muted">عندما يطلب وكيل تشغيل أداة تحتاج موافقة، تظهر هنا.</p>
-          <a routerLink="/chat">ابدأ محادثة</a>
-        </div>
-      }
-    </article>
-  </section>
-
-  <section class="bottom">
-    <article class="card" aria-labelledby="t-h">
-      <div class="card-head"><h2 id="t-h">النشاط عبر الوقت</h2></div>
-      @if (hasTrend()) {
-        <app-line-chart [labels]="trendLabels()" [series]="trend()" caption="ردود المساعد والإجراءات خلال الفترة"></app-line-chart>
-      } @else {
-        <p class="empty small muted">لا نشاط في هذه الفترة.</p>
-      }
-    </article>
-
-    <article class="card" aria-labelledby="tools-h">
-      <div class="card-head"><h2 id="tools-h">أكثر الأدوات استخداماً</h2></div>
-      @for (t of tools(); track t.tool) {
-        <div class="bar">
-          <div class="bar-head small"><span class="mono">{{ t.tool }}</span><span class="muted">{{ t.total }}@if (t.time) { · {{ t.time }}}</span></div>
-          <div class="bar-track"><div class="bar-fill" [style.width.%]="t.width"></div></div>
-        </div>
-      } @empty {
-        <p class="empty small muted">لا استخدام للأدوات في هذه الفترة.</p>
-      }
-    </article>
-
-    @if (summary(); as s) {
-      <article class="card" aria-labelledby="l-h">
-        <div class="card-head"><h2 id="l-h">التعلم والذاكرة</h2></div>
-        <div class="tiles">
-          <div class="tile"><span class="small muted">دروس معتمدة</span><strong>{{ fmt(s.learning.lessons_active) }}</strong></div>
-          <div class="tile"><span class="small muted">بانتظار المراجعة</span><strong [class.text-warn]="s.learning.lessons_pending">{{ fmt(s.learning.lessons_pending) }}</strong></div>
-          <div class="tile"><span class="small muted">مهارات نشطة</span><strong>{{ fmt(s.learning.skills_active) }}</strong></div>
-          <div class="tile"><span class="small muted">ذكريات جديدة</span><strong>{{ fmt(s.learning.memories_added) }}</strong></div>
-        </div>
-      </article>
+    } @empty {
+      <div class="card empty-all">
+        <p>كل الأقسام مخفية.</p>
+        <a routerLink="/customize">اختر ما يظهر هنا</a>
+      </div>
     }
-  </section>
+  </div>
 }

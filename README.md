@@ -310,7 +310,10 @@ page and the chat page. The home page reads `/api/v1/analytics/summary`:
 KPI rings, a map of the assistant with its agents and systems (click a node
 for its numbers), the latest approval actions, an activity chart, the most
 used tools, learning and memory, a range switch (today / 7 days / 30 days),
-and a pause/resume button. It refreshes every 30 seconds.
+and a pause/resume button. It refreshes every 30 seconds. **Customize**
+(`/customize`) chooses which widgets show, their order, density and motion;
+it is saved at once in the app's local storage on this computer and read
+defensively (unknown widgets dropped, new ones appended).
 
 The **team page** (`/team`) shows every agent with today's activity and
 hires new ones from the six templates (name, extra instructions, the

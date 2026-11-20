@@ -19,6 +19,7 @@ Layout:
   server summary into cards, map nodes, rows and chart lines (pure functions,
   unit-tested); a new widget is one more builder there.
 - `src/app/shared/line-chart.ts`: SVG line chart (tooltip, screen-reader table).
+- `src/app/core/layout.ts` + `src/app/customize/`: home widgets, order, density (add a widget to `WIDGETS` and a `@case` in the dashboard).
 - `src/app/team/`: team page, hiring, and agent profile (`team-view.ts` holds the rules).
 - `src/app/approvals/`: approvals page (`approvals-view.ts` holds the rules: risk, status, whether approve is offered).
 - `src/app/core/approvals-store.ts`: pending list shared by the menu badge and the page.

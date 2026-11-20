@@ -2,6 +2,7 @@ import { Routes, UrlMatchResult, UrlSegment } from '@angular/router';
 
 import { ApprovalsPage } from './approvals/approvals-page';
 import { ChatPage } from './chat/chat-page';
+import { CustomizePage } from './customize/customize-page';
 import { DashboardPage } from './dashboard/dashboard-page';
 import { AgentPage } from './team/agent-page';
 import { TeamPage } from './team/team-page';
@@ -22,6 +23,7 @@ export function chatMatcher(segments: UrlSegment[]): UrlMatchResult | null {
 export const routes: Routes = [
   { path: '', pathMatch: 'full', component: DashboardPage, title: 'لوحة التحليلات' },
   { matcher: chatMatcher, component: ChatPage, title: 'المحادثة' },
+  { path: 'customize', component: CustomizePage, title: 'تخصيص الرئيسية' },
   { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
   { path: 'team', component: TeamPage, title: 'الفريق' },
   { path: 'team/:id', component: AgentPage, title: 'ملف الوكيل' },

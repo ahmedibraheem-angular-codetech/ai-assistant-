@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AssistantApi } from '../core/api';
+import { LayoutService } from '../core/layout';
 import { AnalyticsRange, AnalyticsSummary } from '../core/models';
 import { LineChart } from '../shared/line-chart';
 import {
@@ -27,6 +28,7 @@ const RING = 2 * Math.PI * 26;
 })
 export class DashboardPage {
   private readonly api = inject(AssistantApi);
+  readonly layout = inject(LayoutService);
 
   readonly ranges = RANGES;
   readonly range = signal<AnalyticsRange>('7d');

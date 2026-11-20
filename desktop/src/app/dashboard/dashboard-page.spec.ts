@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
 import { Invoke, TAURI_INVOKE } from '../core/api';
+import { LayoutService } from '../core/layout';
 import { AnalyticsSummary } from '../core/models';
 import { DashboardPage } from './dashboard-page';
 import { summary } from './summary.testing';
@@ -26,6 +27,9 @@ async function settle(fixture: { whenStable: () => Promise<unknown>; detectChang
 }
 
 describe('DashboardPage', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
   it('loads the summary and shows KPIs, the map, the queue and learning', async () => {
     const { fixture, el, requests } = setup(() => ({ status: 200, body: summary() }));
     await settle(fixture);
@@ -95,5 +99,25 @@ describe('DashboardPage', () => {
     });
     await settle(fixture);
     expect(el.querySelector('[role="alert"]')?.textContent).toContain('not running');
+  });
+
+  it('follows the saved layout: hidden widgets are not drawn, order is kept', async () => {
+    const { fixture, el } = setup(() => ({ status: 200, body: summary() }));
+    const layout = TestBed.inject(LayoutService);
+    layout.toggle('kpis');
+    layout.move('tools', -1);
+    layout.move('tools', -1);
+    await settle(fixture);
+    expect(el.querySelector('.kpi')).toBeNull();
+    const order = [...el.querySelectorAll('.widget')].map((w) => w.getAttribute('data-widget'));
+    expect(order).toEqual(['map', 'tools', 'queue', 'trend', 'learning']);
+  });
+
+  it('says so when every widget is hidden, with a link to customize', async () => {
+    const { fixture, el } = setup(() => ({ status: 200, body: summary() }));
+    const layout = TestBed.inject(LayoutService);
+    for (const id of ['kpis', 'map', 'queue', 'trend', 'tools', 'learning'] as const) layout.toggle(id);
+    await settle(fixture);
+    expect(el.querySelector('.empty-all')?.textContent).toContain('كل الأقسام مخفية');
   });
 });
