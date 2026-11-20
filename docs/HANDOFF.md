@@ -1,4 +1,4 @@
-# Handoff — Personal AI Assistant (state at 2026-11-20)
+# Handoff — Personal AI Assistant (state at 2026-11-21)
 
 Read this first in a new session. The running project log is also in the
 assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief`).
@@ -8,12 +8,14 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 | Item | Value |
 |---|---|
 | Repo (on the Mac) | `/Users/a.m.ibraheem/Desktop/local-mac-ai-assistant/personal-ai-assistant` |
-| GitHub | `ahmedibraheem-angular-codetech/ai-assistant-`, branch `wp02-spawn-unreaped-remediation` (all pushed, last commit `ed2767f`) |
+| GitHub | `ahmedibraheem-angular-codetech/ai-assistant-`, branch `wp02-spawn-unreaped-remediation` (all pushed) |
 | Python | `.venv/bin/python` (3.15, macOS venv — use the Mac shell via Desktop Commander, not a Linux VM) |
-| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **538 passed, 12 skipped** |
+| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **552 passed, 12 skipped** |
 | Live Docker tests | `RUN_DOCKER_TESTS=1 ... tests/test_sandbox.py` |
 | Run server | `.venv/bin/python -m app --port 8000` (token: `.venv/bin/python -m app.control_plane token`) |
-| DB | `data/assistant.db`, **schema 24**; backups `data/assistant.db.backup-before-vNN` |
+| DB | `data/assistant.db`, **schema 25**; backups `data/assistant.db.backup-before-vNN` |
+| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **52 passed**; `cd src-tauri && cargo test` → **14 passed**; `npm run check:freeze` after adding a package |
+| Run app | server first, then `cd desktop && ASSISTANT_API_PORT=8765 npx tauri dev` (dev server pinned to 127.0.0.1:4200) |
 | Old design/review docs | `~/.cursor/projects/Users-a-m-ibraheem-Desktop-local-mac-ai-assistant-personal-ai-assistant/agent-tools/` |
 
 ## Done (phases 0–4)
@@ -26,7 +28,22 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 
 README.md documents every API with curl examples.
 
-## Next: phase 5 — Mac app (Angular + Tauri 2)
+## Phase 5 progress — Mac app
+
+Done (each slice committed and pushed):
+- **Slice 1** scaffold + token bridge (`api_request`; Rust reads the token file per request, loopback only, no proxy/redirects) + chat page.
+- **Slice 2** `GET /api/v1/analytics/summary` + analytics home page (KPI rings, assistant map, latest actions, SVG activity chart, tools, learning, range switch, pause/resume), modern dark/light shell. Design canvas: https://claude.ai/artifact/XVeAQyt9zx2bqufBpvkRnw
+- **Slice 3** approvals page (pending + history, sealed arguments, change preview, integrity warnings, two-click approve, menu badge).
+- **Fix** concurrent chat turns returned 500 (SQLite single writer while a turn holds its transaction): one chat turn at a time per server.
+- **Schema 25** `tool_runs` log (every started run; written in the bound session during a turn); analytics read it.
+
+Lessons from this phase (keep):
+- The window runs with `freezePrototype: true`. echarts breaks it silently (the app never starts); charts are plain SVG. Run `npm run check:freeze` for any new package.
+- `localhost:4200` resolved to IPv6 only and the window loaded nothing; dev server and devUrl are pinned to 127.0.0.1.
+- A chat turn keeps a write transaction open while the model answers. Any other writer at that moment (approve, pause) can still wait up to 30 s or fail; chat-vs-chat is serialized, the rest is a known limit to fix by committing the user message before the model call.
+- Computer use is not set up on the Mac, so the window cannot be screenshotted; verify through the server log or the built-in browser at 127.0.0.1:4200.
+
+## Next: phase 5 — remaining slices
 
 Floating window on a global shortcut, Menu Bar icon, starts with macOS; pages
 for chat, conversations, approvals inbox, team + agent profiles
@@ -35,9 +52,9 @@ budgets, standing approvals, hiring). Talks to the local API with the Bearer
 token (read the token file through a Tauri command; never ship it in the web
 bundle). Rust/cargo is installed. Needs npm downloads.
 
-Slices: (1) scaffold Tauri + Angular, token bridge, chat page; (2) approvals
-inbox + pause button; (3) team/profile/hiring pages; (4) projects/graph/study
-digest; (5) floating window, shortcut, Menu Bar, autostart; (6) packaging.
+Remaining slices: team/profile/hiring pages; customize page for the home
+widgets (design exists on the canvas); projects/graph/study digest; floating
+window, shortcut, Menu Bar, autostart; packaging.
 Later: 6 voice + mobile, 7 automation (n8n, browser, proactive tasks),
 8 optional LoRA fine-tuning, 9 hardening.
 
