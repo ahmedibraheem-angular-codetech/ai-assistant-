@@ -202,6 +202,22 @@ lists every file with its hash; a file that changes afterwards is skipped and
 a file added afterwards is not included. Sensitive files (`.env`, keys,
 databases) and unsupported types are never included. Max 100 files per run.
 
+### Knowledge graph
+
+People, projects, organizations, places, and topics, and how they relate:
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/graph/entities -d '{"type":"person","name":"أحمد"}'
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/graph/relations -d '{"subject":"أحمد","relation":"مسؤول عن","object":"Website"}'
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/graph/lookup?name=احمد"
+```
+
+Names match across Arabic spelling variants. Agents use `graph_lookup` (read)
+and `graph_record` (append-only; cannot edit, delete, or overwrite your
+descriptions). Hired agents get both tools.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

@@ -98,6 +98,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 20:
         upgrade_to_20(engine)
         return
+    if version == 21:
+        upgrade_to_21(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -218,6 +221,14 @@ def upgrade_to_20(engine: Engine) -> None:
 
     ProjectRecord.__table__.create(bind=engine, checkfirst=True)
     ProjectEntryRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_21(engine: Engine) -> None:
+    """Add the knowledge graph. No existing table is rewritten."""
+    from app.graph.core import GraphEntityRecord, GraphRelationRecord
+
+    GraphEntityRecord.__table__.create(bind=engine, checkfirst=True)
+    GraphRelationRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

@@ -9,6 +9,7 @@ from app.api.routes import (
     chat,
     control,
     conversations,
+    graph,
     health,
     memories,
     permissions,
@@ -99,3 +100,4 @@ app.include_router(approvals.router, prefix=settings.api_prefix, tags=["Approval
 app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recoveries"])
 app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])
 app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"])
+app.include_router(graph.router, prefix=settings.api_prefix, tags=["Knowledge graph"])

@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
-CURRENT_SCHEMA_VERSION = 20
+CURRENT_SCHEMA_VERSION = 21
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -87,6 +87,7 @@ def init_database() -> None:
     from app.core import controls
     from app.agents import team
     from app.projects import core as project_core
+    from app.graph import core as graph_core
     from app.tools import models as tool_models
 
     _ = (
@@ -108,6 +109,8 @@ def init_database() -> None:
         team.AgentTeamMemberRecord,
         project_core.ProjectRecord,
         project_core.ProjectEntryRecord,
+        graph_core.GraphEntityRecord,
+        graph_core.GraphRelationRecord,
         approval_models.ApprovalRequestRecord,
     )
     from app.approvals.payloads import McpExecutionPayloadRecord
