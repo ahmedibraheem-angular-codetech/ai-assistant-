@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     # Default daily limits per agent. Empty means unlimited; per-agent budgets override.
     agent_daily_tool_calls: int | None = Field(default=None, ge=1, le=100_000)
     agent_daily_chat_turns: int | None = Field(default=None, ge=1, le=100_000)
+    # Code sandbox (run_code). Off by default. Each run needs approval.
+    sandbox_enabled: bool = False
+    sandbox_docker_path: str = "docker"
+    sandbox_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    sandbox_memory_mb: int = Field(default=512, ge=64, le=4_096)
+    sandbox_cpus: float = Field(default=1.0, gt=0, le=4)
+    sandbox_python_image: str = "python:3.12-alpine"
+    sandbox_node_image: str = "node:22-alpine"
+    sandbox_shell_image: str = "alpine:3.20"
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

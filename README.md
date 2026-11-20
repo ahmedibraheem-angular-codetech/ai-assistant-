@@ -155,6 +155,21 @@ Templates: `marketing`, `developer`, `researcher`, `secretary`, `analyst`,
 instructions, only the template's tools, and a suggested daily budget. It does
 not create standing approvals; add those yourself if you want them.
 
+### Code sandbox (`run_code`)
+
+Agents can run short Python, Node, or shell programs in a throwaway Docker
+container. Off by default; turn it on in `.env`:
+
+```bash
+SANDBOX_ENABLED=true
+docker pull python:3.12-alpine node:22-alpine alpine:3.20   # once
+```
+
+Every run asks for your approval (standing approvals never apply). The
+container has no network, no access to your files, a read-only filesystem, a
+non-root user, no capabilities, memory/CPU/process limits, a timeout, and an
+output cap, and it is deleted after the run. Live tests: `RUN_DOCKER_TESTS=1 pytest tests/test_sandbox.py`.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

@@ -84,10 +84,11 @@ TEMPLATES: dict[str, AgentTemplate] = {
                 "small, testable steps and say how to verify each one."
             ),
             tools=("list_files", "search_files", "read_file", "get_file_metadata", "inspect_project",
-                   "update_text_file", "create_text_file"),
+                   "update_text_file", "create_text_file", "run_code"),
             daily_tool_calls=300,
             daily_chat_turns=150,
-            notes=("Give it a workspace (the project folder). File changes always ask for approval.",),
+            notes=("Give it a workspace (the project folder). File changes always ask for approval.",
+                   "run_code needs SANDBOX_ENABLED=true and asks before every run.",),
         ),
         AgentTemplate(
             id="researcher",
@@ -131,7 +132,7 @@ TEMPLATES: dict[str, AgentTemplate] = {
                 "check the arithmetic with the calculator, and explain trends simply. Show the numbers "
                 "you used and how you got each result. Flag missing or suspicious data."
             ),
-            tools=("read_file", "search_files", "list_files", "calculator", "search_knowledge"),
+            tools=("read_file", "search_files", "list_files", "calculator", "search_knowledge", "run_code"),
             daily_tool_calls=200,
             daily_chat_turns=100,
             notes=("Give it a workspace with the data files.",),
