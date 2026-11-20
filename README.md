@@ -197,6 +197,11 @@ Images (`.png .jpg .jpeg .heic .tiff .bmp .gif .webp`) can be ingested: their
 text is read locally with macOS Vision OCR (Arabic and English), with no
 download or extra package.
 
+`ingest_folder` adds a whole workspace folder with one approval. The approval
+lists every file with its hash; a file that changes afterwards is skipped and
+a file added afterwards is not included. Sensitive files (`.env`, keys,
+databases) and unsupported types are never included. Max 100 files per run.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

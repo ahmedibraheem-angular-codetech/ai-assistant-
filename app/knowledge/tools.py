@@ -14,6 +14,7 @@ KNOWLEDGE_TOOL_NAMES = frozenset(
         "search_knowledge",
         "get_document",
         "ingest_document",
+        "ingest_folder",
         "reindex_document",
         "delete_document",
     }
@@ -131,6 +132,32 @@ class IngestDocumentTool(_KnowledgeTool):
         return await self._service().ingest(self._agent(), arguments)
 
 
+class IngestFolderTool(_KnowledgeTool):
+    name = "ingest_folder"
+    description = (
+        "Ingest the supported files of one authorized workspace folder into local knowledge "
+        "after one approval. The approval lists every file and its hash; a file that changes "
+        "after approval is skipped. Sensitive files are never included."
+    )
+    input_schema = _object(
+        ["workspace_id", "scope"],
+        {
+            "workspace_id": _WORKSPACE,
+            "folder": {"type": "string", "maxLength": 400},
+            "recursive": {"type": "boolean"},
+            "max_files": {"type": "integer", "minimum": 1, "maximum": 100},
+            "scope": _SCOPE,
+            "recipient_agent_ids": _RECIPIENTS,
+        },
+    )
+    timeout_seconds = 600.0
+    permission_manifest = _manifest(name, description, action="execute", sensitive=True)
+
+    async def run(self, arguments: dict) -> dict:
+        self.calls += 1
+        return await self._service().ingest_folder(self._agent(), arguments)
+
+
 class ReindexDocumentTool(_KnowledgeTool):
     name = "reindex_document"
     description = "Replace one authorized document with a new embedding generation after approval."
@@ -161,6 +188,7 @@ def builtin_knowledge_tools() -> list[Tool]:
         SearchKnowledgeTool(),
         GetDocumentTool(),
         IngestDocumentTool(),
+        IngestFolderTool(),
         ReindexDocumentTool(),
         DeleteDocumentTool(),
     ]

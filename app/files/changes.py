@@ -95,7 +95,7 @@ class StagedChange:
 
 def inspect_change(tool_name: str, agent_id: str | None, arguments: dict) -> StagedChange:
     """Validate a change and return digest-only arguments. No file is written."""
-    if tool_name in {"ingest_document", "reindex_document", "delete_document"}:
+    if tool_name in {"ingest_document", "ingest_folder", "reindex_document", "delete_document"}:
         from app.knowledge.stage import stage_knowledge
 
         return stage_knowledge(tool_name, agent_id, arguments)

@@ -18,7 +18,8 @@ _PARENT = "User-private knowledge is available to the parent agent."
 _RECIPIENTS = "Those knowledge recipients are not allowed."
 _DOCUMENT = "That document was not found."
 
-_MUTATIONS = frozenset({"ingest_document", "reindex_document", "delete_document"})
+_MUTATIONS = frozenset({"ingest_document", "ingest_folder", "reindex_document", "delete_document"})
+FOLDER_MAX_FILES = 100
 _SCOPES = frozenset({"user_private", "agent_private", "project", "shared"})
 
 
@@ -31,6 +32,8 @@ def stage_knowledge(tool_name: str, agent_id: str | None, arguments: dict) -> St
         return _stage_delete(agent_id, arguments)
     if tool_name == "reindex_document":
         return _stage_reindex(agent_id, arguments)
+    if tool_name == "ingest_folder":
+        return _stage_folder(agent_id, arguments)
     return _stage_ingest(agent_id, arguments)
 
 
@@ -180,3 +183,80 @@ def _project_visible(agent_id: str, document: dict) -> bool:
         return granted and _path_allowed(session, agent_id, workspace_id, relative_path)
     finally:
         session.close()
+
+
+def folder_candidates(agent_id: str, workspace_id: str, folder: str, *, recursive: bool, limit: int) -> list[str]:
+    """Supported, non-sensitive files under one authorized folder (sorted, capped)."""
+    from app.files.access import list_directory, relative_parts
+    from app.files.changes import _reject_sensitive
+    from app.files.grants import AgentWorkspaceGrantRepository
+    from app.files.parsers import category_for
+    from app.knowledge.ocr import IMAGE_EXTENSIONS
+    from app.knowledge.source import _DENIED, _root
+
+    session = get_session_factory()()
+    try:
+        if not AgentWorkspaceGrantRepository(session).allows(agent_id, workspace_id):
+            raise FileAccessError(_DENIED)
+        root = _root(session, workspace_id)
+    finally:
+        session.close()
+    entries = list_directory(
+        root, folder or None, recursive=recursive, limit=2_000, max_depth=6 if recursive else 0, extensions=None
+    )
+    picked: list[str] = []
+    for entry in entries:
+        if entry.get("entry_type") != "file":
+            continue
+        extension = str(entry.get("extension") or "")
+        if category_for(extension) == "unsupported" and extension not in IMAGE_EXTENSIONS:
+            continue
+        try:
+            _reject_sensitive(relative_parts(entry["relative_path"]))
+        except FileAccessError:
+            continue
+        if (entry.get("size_bytes") or 0) > get_settings().knowledge_max_file_bytes:
+            continue
+        picked.append(entry["relative_path"])
+    picked.sort()
+    return picked[:limit]
+
+
+def _stage_folder(agent_id: str, arguments: dict) -> StagedChange:
+    """Seal the exact list of files (path + hash) the user approves."""
+    scope = arguments.get("scope")
+    if scope not in _SCOPES:
+        raise ToolValidationError("Tool argument 'scope' is not valid.")
+    _require_scope_caller(agent_id, scope)
+    workspace_id = arguments.get("workspace_id")
+    if not isinstance(workspace_id, str):
+        raise ToolValidationError("The source workspace is required.")
+    try:
+        parsed = str(UUID(workspace_id))
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ToolValidationError("Tool argument 'workspace_id' must be a UUID.") from exc
+    folder = str(arguments.get("folder") or "").strip().strip("/")
+    limit = min(int(arguments.get("max_files") or 50), FOLDER_MAX_FILES)
+    paths = folder_candidates(agent_id, parsed, folder, recursive=bool(arguments.get("recursive", True)), limit=limit)
+    files = []
+    for relative in paths:
+        try:
+            payload, canonical = read_authorized_bytes(agent_id, parsed, relative)
+        except (FileAccessError, ToolExecutionError):
+            continue  # path allow-list or size: silently not part of the approved set
+        files.append({"relative_path": canonical, "source_sha256": content_hash(payload)})
+    if not files:
+        raise FileAccessError("No supported files were found in that folder.")
+    model = get_settings().knowledge_embedding_model
+    digest = get_embedding_client().resolve(model)
+    sealed = {
+        "operation": "ingest_folder",
+        "scope": scope,
+        "workspace_id": parsed,
+        "folder": folder,
+        "files": files,
+        "embedding_model": model,
+        "embedding_digest": digest,
+        "recipient_agent_ids": _recipients(agent_id, scope, arguments.get("recipient_agent_ids")),
+    }
+    return StagedChange(bind_arguments(sealed), None)

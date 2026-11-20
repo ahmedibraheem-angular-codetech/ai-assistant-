@@ -49,6 +49,31 @@ class KnowledgeService:
         self._require_approval("ingest_document", agent_id, "execute", arguments)
         return await self._replace(agent_id, arguments, document_id=None)
 
+    async def ingest_folder(self, agent_id: str, arguments: dict) -> dict:
+        """Ingest the exact files sealed in the approval. A file that changed is skipped."""
+        self._require_approval("ingest_folder", agent_id, "execute", arguments)
+        results = []
+        for item in arguments.get("files") or []:
+            self._checkpoint()
+            per_file = {
+                "scope": arguments.get("scope"),
+                "workspace_id": arguments.get("workspace_id"),
+                "relative_path": item.get("relative_path"),
+                "source_sha256": item.get("source_sha256"),
+                "embedding_model": arguments.get("embedding_model"),
+                "embedding_digest": arguments.get("embedding_digest"),
+                "recipient_agent_ids": arguments.get("recipient_agent_ids") or [],
+            }
+            try:
+                outcome = await self._replace(agent_id, per_file, document_id=None)
+                results.append({"relative_path": item.get("relative_path"), "status": "ready",
+                                "reused": outcome.get("reused", False), "document_id": outcome.get("document_id")})
+            except ToolExecutionError as exc:
+                results.append({"relative_path": item.get("relative_path"), "status": "skipped", "reason": str(exc)})
+        ready = sum(1 for item in results if item["status"] == "ready")
+        return {"files": results, "ready": ready, "skipped": len(results) - ready,
+                "data_boundary": "untrusted_document_content"}
+
     async def reindex(self, agent_id: str, arguments: dict) -> dict:
         self._require_approval("reindex_document", agent_id, "execute", arguments)
         document_id = arguments.get("document_id")
