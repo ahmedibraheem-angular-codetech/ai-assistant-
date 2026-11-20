@@ -2,14 +2,20 @@ import { Injectable, InjectionToken, inject } from '@angular/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import {
-  AgentSummary,
+  Agent,
+  AgentProfile,
+  AgentTemplate,
   AnalyticsRange,
   AnalyticsSummary,
   Approval,
   ApprovalList,
   ChatReply,
   ConversationList,
+  HireResult,
+  Lesson,
   MessageList,
+  Skill,
+  StudyPlan,
 } from './models';
 
 /**
@@ -126,8 +132,60 @@ export class AssistantApi {
     return this.request<Approval>('POST', `/api/v1/approvals/${encodeURIComponent(id)}/reject`);
   }
 
-  agents(): Promise<{ agents: AgentSummary[]; count: number }> {
+  agents(): Promise<{ agents: Agent[]; count: number }> {
     return this.request('GET', '/api/v1/agents');
+  }
+
+  setAgentEnabled(id: string, enabled: boolean): Promise<Agent> {
+    return this.request('PATCH', `/api/v1/agents/${encodeURIComponent(id)}`, { enabled });
+  }
+
+  templates(): Promise<{ templates: AgentTemplate[]; count: number }> {
+    return this.request('GET', '/api/v1/agent-templates');
+  }
+
+  hire(body: { template_id: string; name?: string; extra_instructions?: string; apply_budget: boolean }): Promise<HireResult> {
+    return this.request('POST', '/api/v1/agents/hire', body);
+  }
+
+  profile(id: string): Promise<AgentProfile> {
+    return this.request('GET', `/api/v1/agents/${encodeURIComponent(id)}/profile`);
+  }
+
+  setLessonStatus(id: string, status: Lesson['status']): Promise<Lesson> {
+    return this.request('PATCH', `/api/v1/lessons/${encodeURIComponent(id)}`, { status });
+  }
+
+  setSkillStatus(id: string, status: 'active' | 'retired' | 'rejected'): Promise<Skill> {
+    return this.request('PATCH', `/api/v1/skills/${encodeURIComponent(id)}`, { status });
+  }
+
+  team(id: string): Promise<{ agent_id: string; member_ids: string[] }> {
+    return this.request('GET', `/api/v1/agents/${encodeURIComponent(id)}/team`);
+  }
+
+  setTeam(id: string, memberIds: string[]): Promise<{ agent_id: string; member_ids: string[] }> {
+    return this.request('PUT', `/api/v1/agents/${encodeURIComponent(id)}/team`, { member_ids: memberIds });
+  }
+
+  /** The plan, or null when the agent has none (the server answers 404). */
+  async studyPlan(id: string): Promise<StudyPlan | null> {
+    try {
+      return await this.request<StudyPlan>('GET', `/api/v1/agents/${encodeURIComponent(id)}/study-plan`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  setStudyPlan(id: string, topics: string[], intervalHours: number, enabled = true): Promise<StudyPlan> {
+    return this.request('PUT', `/api/v1/agents/${encodeURIComponent(id)}/study-plan`, {
+      topics, interval_hours: intervalHours, enabled,
+    });
+  }
+
+  studyNow(id: string): Promise<Record<string, unknown>> {
+    return this.request('POST', `/api/v1/agents/${encodeURIComponent(id)}/study-now`);
   }
 
   conversations(limit = 50): Promise<ConversationList> {

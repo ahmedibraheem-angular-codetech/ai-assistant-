@@ -1,0 +1,158 @@
+<a routerLink="/team" class="back small">← الفريق</a>
+
+@if (error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+}
+@if (notice()) {
+  <p class="banner ok" role="status" dir="auto">{{ notice() }}</p>
+}
+
+@if (profile(); as p) {
+  <header class="top">
+    <span class="avatar big" aria-hidden="true">{{ p.agent.name.slice(0, 1) }}</span>
+    <div class="title">
+      <h1 dir="auto">{{ p.agent.name }}</h1>
+      <p class="muted" dir="auto">{{ p.agent.role }}@if (agent(); as a) { · <span class="mono" dir="ltr">{{ a.model }}</span>}</p>
+    </div>
+    @if (agent(); as a) {
+      <button type="button" [class]="a.enabled ? 'stop' : 'primary'" [disabled]="busy() === 'enabled'" (click)="toggleEnabled()">
+        {{ a.enabled ? 'أوقف الوكيل' : 'شغّل الوكيل' }}
+      </button>
+    }
+  </header>
+
+  <section class="stats" aria-label="اليوم">
+    <div class="card stat">
+      <span class="small muted">أدوات اليوم</span>
+      <strong>{{ usage(p.usage_today.tool_calls, p.usage_today.daily_tool_calls) }}</strong>
+      <div class="meter"><div [style.width.%]="usageRatio(p.usage_today.tool_calls, p.usage_today.daily_tool_calls) * 100"></div></div>
+    </div>
+    <div class="card stat">
+      <span class="small muted">ردود اليوم</span>
+      <strong>{{ usage(p.usage_today.chat_turns, p.usage_today.daily_chat_turns) }}</strong>
+      <div class="meter"><div [style.width.%]="usageRatio(p.usage_today.chat_turns, p.usage_today.daily_chat_turns) * 100"></div></div>
+    </div>
+    <div class="card stat"><span class="small muted">مهارات نشطة</span><strong>{{ p.skills.length }}</strong></div>
+    <div class="card stat"><span class="small muted">دروس معتمدة</span><strong>{{ p.lessons_active.length }}</strong></div>
+    <div class="card stat"><span class="small muted">حالات تقييم</span><strong>{{ p.eval_cases }}</strong></div>
+  </section>
+
+  @if (waiting()) {
+    <section class="card attention" aria-labelledby="wait-h">
+      <h2 id="wait-h">بانتظار مراجعتك ({{ waiting() }})</h2>
+      @for (l of p.lessons_pending; track l.id) {
+        <div class="item-row">
+          <div class="grow">
+            <p dir="auto">{{ l.text }}</p>
+            <span class="small muted">درس · {{ lessonSource(l) }}@if (l.topic) { · {{ l.topic }}} · {{ ago(l.created_at) }}</span>
+          </div>
+          <button type="button" class="primary" [disabled]="!!busy()" (click)="lesson(l, 'active')">اعتمد</button>
+          <button type="button" [disabled]="!!busy()" (click)="lesson(l, 'retired')">استبعد</button>
+        </div>
+      }
+      @for (s of p.skills_waiting; track s.id) {
+        <div class="item-row">
+          <div class="grow">
+            <p><strong dir="auto">{{ s.name }}</strong> <span class="small muted">v{{ s.version }}</span></p>
+            <span class="small muted" dir="auto">مهارة · {{ s.description }}</span>
+          </div>
+          <button type="button" class="primary" [disabled]="!!busy()" (click)="skill(s, 'active')">فعّل</button>
+          <button type="button" [disabled]="!!busy()" (click)="skill(s, 'rejected')">ارفض</button>
+        </div>
+      }
+      <p class="small muted">الدروس القادمة من محتوى خارجي (الويب) لا تُستخدم حتى تعتمدها.</p>
+    </section>
+  }
+
+  <div class="two">
+    <section class="card" aria-labelledby="skills-h">
+      <h2 id="skills-h">المهارات</h2>
+      @for (s of p.skills; track s.id) {
+        <div class="skill">
+          <button type="button" class="skill-head" [attr.aria-expanded]="openSkill() === s.id" (click)="openSkill.set(openSkill() === s.id ? null : s.id)">
+            <strong dir="auto">{{ s.name }}</strong>
+            <span class="small muted">v{{ s.version }}</span>
+            <span class="badge" [class]="'badge tone-' + skillStatus(s).tone">{{ skillStatus(s).label }}</span>
+          </button>
+          <p class="small muted" dir="auto">{{ s.description }}</p>
+          @if (openSkill() === s.id) {
+            <pre dir="auto">{{ s.steps }}</pre>
+            <button type="button" class="small-btn" [disabled]="!!busy()" (click)="skill(s, 'retired')">أوقف هذه المهارة</button>
+          }
+        </div>
+      } @empty {
+        <p class="small muted">لا مهارات نشطة بعد. يحفظ الوكيل مهارة عندما يجد طريقة متكررة، وتُفعّل بعد نجاحها في التقييم.</p>
+      }
+    </section>
+
+    <section class="card" aria-labelledby="lessons-h">
+      <h2 id="lessons-h">الدروس المعتمدة</h2>
+      @for (l of p.lessons_active; track l.id) {
+        <div class="item-row">
+          <div class="grow">
+            <p dir="auto">{{ l.text }}</p>
+            <span class="small muted">{{ lessonSource(l) }} · استُخدم {{ l.uses }} مرة</span>
+          </div>
+          <button type="button" class="small-btn" [disabled]="!!busy()" (click)="lesson(l, 'retired')">استبعد</button>
+        </div>
+      } @empty {
+        <p class="small muted">لا دروس بعد. قيّم ردوده أو اطلب منه أن يتذكر شيئاً.</p>
+      }
+    </section>
+  </div>
+
+  <div class="two">
+    <section class="card" aria-labelledby="study-h">
+      <h2 id="study-h">وقت المذاكرة</h2>
+      @if (plan(); as plan) {
+        <p class="small muted">{{ intervalLabel(plan.interval_hours) }} · الجلسة القادمة {{ until(plan.next_run_at) }}@if (plan.last_run_at) { · آخر جلسة {{ ago(plan.last_run_at) }}}</p>
+      } @else {
+        <p class="small muted">لا توجد خطة. أضف مواضيع ليذاكرها الوكيل وحده.</p>
+      }
+      <form class="plan" (submit)="$event.preventDefault(); savePlan()">
+        <label for="topics">المواضيع (سطر لكل موضوع)</label>
+        <textarea id="topics" name="topics" rows="4" dir="auto" placeholder="إعلانات فيسبوك&#10;كتابة المحتوى"
+          [ngModel]="topicsText()" (ngModelChange)="topicsText.set($event)"></textarea>
+        <label for="interval">التكرار</label>
+        <select id="interval" name="interval" [ngModel]="interval()" (ngModelChange)="interval.set(+$event)">
+          @for (h of intervals; track h) {
+            <option [value]="h">{{ intervalLabel(h) }}</option>
+          }
+        </select>
+        <div class="row-actions">
+          <button type="submit" class="primary" [disabled]="!!busy()">{{ busy() === 'plan' ? 'جارٍ الحفظ…' : 'احفظ الخطة' }}</button>
+          <button type="button" [disabled]="!!busy() || !plan()" (click)="studyNow()">{{ busy() === 'study' ? 'يذاكر الآن…' : 'ذاكر الآن' }}</button>
+        </div>
+        <p class="small muted">البحث في الويب يمر بالموافقات، والنتائج تُحفظ كدروس بانتظار مراجعتك.</p>
+      </form>
+    </section>
+
+    <section class="card" aria-labelledby="team-h">
+      <h2 id="team-h">فريقه</h2>
+      <p class="small muted">الوكلاء الذين يستطيع تفويض مهام لهم. كل عضو يحتفظ بصلاحياته وميزانيته.</p>
+      @for (o of others(); track o.id) {
+        <label class="check">
+          <input type="checkbox" [checked]="isMember(o.id)" [disabled]="!!busy()" (change)="toggleMember(o.id)">
+          <span dir="auto">{{ o.name }}</span> <span class="small muted" dir="auto">{{ o.role }}</span>
+        </label>
+      } @empty {
+        <p class="small muted">لا يوجد وكلاء آخرون بعد.</p>
+      }
+    </section>
+  </div>
+
+  <section class="card" aria-labelledby="evals-h">
+    <h2 id="evals-h">آخر التقييمات</h2>
+    @for (e of p.recent_evaluations; track e.id) {
+      <div class="item-row">
+        <span class="grow small">{{ ago(e.created_at) }}</span>
+        <span class="small">قبل {{ score(e.baseline) }} ← بعد {{ score(e.candidate) }}</span>
+        <span class="badge" [class]="'badge tone-' + evalDecision(e.decision).tone">{{ evalDecision(e.decision).label }}</span>
+      </div>
+    } @empty {
+      <p class="small muted">لم تُقيّم أي مهارة بعد. أضف حالات تقييم ليختبر الوكيل مهاراته الجديدة قبل استخدامها.</p>
+    }
+  </section>
+} @else if (!error()) {
+  <p class="muted center" role="status">جارٍ التحميل…</p>
+}

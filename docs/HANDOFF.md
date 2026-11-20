@@ -14,7 +14,7 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 | Live Docker tests | `RUN_DOCKER_TESTS=1 ... tests/test_sandbox.py` |
 | Run server | `.venv/bin/python -m app --port 8000` (token: `.venv/bin/python -m app.control_plane token`) |
 | DB | `data/assistant.db`, **schema 25**; backups `data/assistant.db.backup-before-vNN` |
-| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **52 passed**; `cd src-tauri && cargo test` → **14 passed**; `npm run check:freeze` after adding a package |
+| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **67 passed**; `cd src-tauri && cargo test` → **14 passed**; `npm run check:freeze` after adding a package |
 | Run app | server first, then `cd desktop && ASSISTANT_API_PORT=8765 npx tauri dev` (dev server pinned to 127.0.0.1:4200) |
 | Old design/review docs | `~/.cursor/projects/Users-a-m-ibraheem-Desktop-local-mac-ai-assistant-personal-ai-assistant/agent-tools/` |
 
@@ -34,6 +34,7 @@ Done (each slice committed and pushed):
 - **Slice 1** scaffold + token bridge (`api_request`; Rust reads the token file per request, loopback only, no proxy/redirects) + chat page.
 - **Slice 2** `GET /api/v1/analytics/summary` + analytics home page (KPI rings, assistant map, latest actions, SVG activity chart, tools, learning, range switch, pause/resume), modern dark/light shell. Design canvas: https://claude.ai/artifact/XVeAQyt9zx2bqufBpvkRnw
 - **Slice 3** approvals page (pending + history, sealed arguments, change preview, integrity warnings, two-click approve, menu badge).
+- **Slice 4** team page, hiring from templates, agent profile (review lessons/skills, evaluations, study plan, team members, stop/start).
 - **Fix** concurrent chat turns returned 500 (SQLite single writer while a turn holds its transaction): one chat turn at a time per server.
 - **Schema 25** `tool_runs` log (every started run; written in the bound session during a turn); analytics read it.
 
@@ -52,7 +53,7 @@ budgets, standing approvals, hiring). Talks to the local API with the Bearer
 token (read the token file through a Tauri command; never ship it in the web
 bundle). Rust/cargo is installed. Needs npm downloads.
 
-Remaining slices: team/profile/hiring pages; customize page for the home
+Remaining slices: customize page for the home
 widgets (design exists on the canvas); projects/graph/study digest; floating
 window, shortcut, Menu Bar, autostart; packaging.
 Later: 6 voice + mobile, 7 automation (n8n, browser, proactive tasks),

@@ -85,7 +85,7 @@
             <span class="small muted">{{ f.label }} <b>{{ f.value }}</b></span>
           }
           @if (map().hiddenAgents) {
-            <span class="small muted push">+{{ map().hiddenAgents }} وكيل آخر في صفحة الفريق</span>
+            <a routerLink="/team" class="small push">+{{ map().hiddenAgents }} وكيل آخر في صفحة الفريق</a>
           }
         </div>
       }

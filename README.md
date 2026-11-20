@@ -312,6 +312,14 @@ for its numbers), the latest approval actions, an activity chart, the most
 used tools, learning and memory, a range switch (today / 7 days / 30 days),
 and a pause/resume button. It refreshes every 30 seconds.
 
+The **team page** (`/team`) shows every agent with today's activity and
+hires new ones from the six templates (name, extra instructions, the
+template's daily budget). An **agent profile** (`/team/<id>`) shows today's
+usage against its limits, lessons and skills waiting for review (approve or
+reject), active skills with their steps, active lessons, recent evaluations,
+the study plan (topics, interval, "study now") and the team members it may
+delegate to; it can also stop or start the agent.
+
 The **approvals page** (`/approvals`, with a count badge in the side menu)
 lists pending requests and the history. A request shows its tool, agent,
 risk, reason, the sealed arguments (secret values hidden), a file-change

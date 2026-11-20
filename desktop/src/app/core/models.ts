@@ -175,3 +175,85 @@ export interface AgentSummary {
   role: string;
   enabled: boolean;
 }
+
+// Team, profiles and hiring (app/api/routes/agents.py, learning.py, control.py).
+
+export interface Agent extends AgentSummary {
+  description: string;
+  system_prompt: string;
+  model: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  title_ar: string;
+  role: string;
+  description: string;
+  tools: string[];
+  daily_tool_calls: number | null;
+  daily_chat_turns: number | null;
+  notes: string[];
+}
+
+export interface HireResult {
+  agent: Agent;
+  template_id: string;
+  granted_tools: string[];
+  budget: unknown;
+  next_steps: string[];
+}
+
+export interface Lesson {
+  id: string;
+  agent_id: string;
+  text: string;
+  topic: string | null;
+  source: string;
+  status: 'active' | 'pending' | 'retired';
+  uses: number;
+  created_at: string;
+}
+
+export interface Skill {
+  id: string;
+  agent_id: string;
+  name: string;
+  version: number;
+  description: string;
+  steps: string;
+  status: 'candidate' | 'pending' | 'active' | 'rejected' | 'retired';
+  source: string;
+  created_at: string;
+}
+
+export interface EvalRun {
+  id: string;
+  skill_id: string;
+  baseline: number | null;
+  candidate: number | null;
+  decision: string;
+  created_at: string;
+}
+
+export interface AgentProfile {
+  agent: { id: string; name: string; role: string };
+  skills: Skill[];
+  skills_waiting: Skill[];
+  lessons_active: Lesson[];
+  lessons_pending: Lesson[];
+  eval_cases: number;
+  recent_evaluations: EvalRun[];
+  usage_today: { tool_calls: number; chat_turns: number; daily_tool_calls: number | null; daily_chat_turns: number | null };
+}
+
+export interface StudyPlan {
+  agent_id: string;
+  topics: string[];
+  interval_hours: number;
+  enabled: boolean;
+  last_run_at: string | null;
+  next_run_at: string;
+}

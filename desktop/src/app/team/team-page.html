@@ -1,0 +1,97 @@
+<header class="top">
+  <div class="title">
+    <h1>الفريق</h1>
+    <p class="muted">وكلاؤك، ونشاط كل واحد اليوم. افتح أي وكيل لترى مهاراته ودروسه وتقييماته.</p>
+  </div>
+  <button type="button" class="primary" (click)="openHiring()">وظّف وكيلاً</button>
+</header>
+
+@if (error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+}
+
+@if (hired(); as h) {
+  <div class="banner ok" role="status">
+    <strong dir="auto">انضم {{ h.agent.name }} إلى الفريق.</strong>
+    <span class="small">الأدوات: <span class="mono" dir="ltr">{{ h.granted_tools.join(', ') || '—' }}</span></span>
+    @for (step of h.next_steps; track step) {
+      <span class="small" dir="auto">• {{ step }}</span>
+    }
+    <a [routerLink]="['/team', h.agent.id]">افتح ملفه</a>
+  </div>
+}
+
+@if (hiring()) {
+  <section class="card hire" aria-labelledby="hire-h">
+    <div class="card-head">
+      <h2 id="hire-h">{{ chosen() ? 'وظّف: ' + chosen()!.title_ar : 'اختر قالباً' }}</h2>
+      <button type="button" (click)="closeHiring()">إغلاق</button>
+    </div>
+    @if (!chosen()) {
+      <div class="templates">
+        @for (t of templates(); track t.id) {
+          <button type="button" class="template" (click)="choose(t)">
+            <strong>{{ t.title_ar }}</strong>
+            <span class="small muted" dir="auto">{{ t.description }}</span>
+            <span class="chips">
+              @for (tool of t.tools.slice(0, 5); track tool) {
+                <span class="chip mono">{{ tool }}</span>
+              }
+              @if (t.tools.length > 5) {
+                <span class="chip">+{{ t.tools.length - 5 }}</span>
+              }
+            </span>
+            <span class="small muted">{{ budgetLabel(t) }}</span>
+          </button>
+        } @empty {
+          <p class="muted">جارٍ تحميل القوالب…</p>
+        }
+      </div>
+    } @else {
+      <form class="hire-form" (submit)="$event.preventDefault(); hire()">
+        <label for="hire-name">الاسم</label>
+        <input id="hire-name" name="name" dir="auto" maxlength="100" [ngModel]="name()" (ngModelChange)="name.set($event)">
+        <label for="hire-extra">تعليمات إضافية (اختياري)</label>
+        <textarea id="hire-extra" name="extra" rows="3" dir="auto" maxlength="4000"
+          placeholder="مثال: ركّز على السوق المصري واكتب بالعامية."
+          [ngModel]="instructions()" (ngModelChange)="instructions.set($event)"></textarea>
+        <label class="check">
+          <input type="checkbox" name="budget" [ngModel]="applyBudget()" (ngModelChange)="applyBudget.set($event)">
+          طبّق الحد اليومي للقالب ({{ budgetLabel(chosen()!) }})
+        </label>
+        <p class="small muted">يحصل الوكيل على أدوات القالب فقط. أي تعديل أو تشغيل كود يمر بالموافقات كالعادة.</p>
+        <div class="row-actions">
+          <button type="submit" class="primary" [disabled]="busy()">{{ busy() ? 'جارٍ التوظيف…' : 'وظّف' }}</button>
+          <button type="button" [disabled]="busy()" (click)="chosen.set(null)">قالب آخر</button>
+        </div>
+      </form>
+    }
+  </section>
+}
+
+@if (loading() && !agents().length) {
+  <p class="muted center" role="status">جارٍ التحميل…</p>
+} @else {
+  <section class="grid" aria-label="الوكلاء">
+    @for (a of sorted(); track a.id) {
+      <button type="button" class="card agent" [class.off]="!a.enabled" (click)="openProfile(a.id)">
+        <span class="agent-head">
+          <span class="avatar" aria-hidden="true">{{ a.name.slice(0, 1) }}</span>
+          <span class="agent-name">
+            <strong dir="auto">{{ a.name }}</strong>
+            <span class="small muted" dir="auto">{{ a.role }}</span>
+          </span>
+          <span class="badge" [class]="a.enabled ? 'badge tone-ok' : 'badge tone-muted'">{{ a.enabled ? 'يعمل' : 'متوقف' }}</span>
+        </span>
+        <span class="small muted">{{ activityLine(a.id) }}</span>
+        <span class="small mono muted" dir="ltr">{{ a.model }}</span>
+      </button>
+    } @empty {
+      <div class="empty">
+        <p>لا يوجد وكلاء بعد.</p>
+        <p class="small muted">وظّف أول وكيل من القوالب الجاهزة: مدير فريق، باحث، كاتب محتوى، وغيرهم.</p>
+        <button type="button" class="primary" (click)="openHiring()">وظّف وكيلاً</button>
+      </div>
+    }
+  </section>
+}
