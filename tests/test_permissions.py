@@ -448,9 +448,9 @@ def test_version_7_workspace_grant_survives_the_permission_migration(tmp_path, m
     reset_database()
     try:
         init_database()
-        from fastapi.testclient import TestClient
+        from tests.client_support import LocalClient
 
-        with TestClient(app) as client:
+        with LocalClient(app) as client:
             agent = create_agent(client, system_prompt="Keep this prompt.")
             folder = tmp_path / "notes"
             folder.mkdir()

@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 
 from app.core.config import get_settings
 from app.core.database import init_database, reset_database
@@ -20,5 +21,5 @@ def database_file(tmp_path, monkeypatch):
 @pytest.fixture
 def client(database_file):
     init_database()
-    with TestClient(app) as test_client:
+    with LocalClient(app) as test_client:
         yield test_client

@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 
 from app.core.config import get_settings
 from app.core.database import init_database, reset_database
@@ -183,11 +184,11 @@ def test_search_pagination(client):
 
 
 def test_memory_persists_after_restart(database_file):
-    with TestClient(app) as client:
+    with LocalClient(app) as client:
         created = create_memory(client, content="Keep this fact.")
         memory_id = created["id"]
     reset_database()
-    with TestClient(app) as restarted:
+    with LocalClient(app) as restarted:
         response = restarted.get(f"/api/v1/memories/{memory_id}")
         assert response.status_code == 200
         assert response.json()["content"] == "Keep this fact."
@@ -299,7 +300,7 @@ def test_migration_from_schema_version_2_preserves_conversations(tmp_path, monke
     reset_database()
     try:
         init_database()
-        with TestClient(app) as client:
+        with LocalClient(app) as client:
             agent = client.get(f"/api/v1/agents/{agent_id}")
             conversation = client.get(f"/api/v1/conversations/{conversation_id}")
             messages = client.get(f"/api/v1/conversations/{conversation_id}/messages")

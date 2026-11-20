@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 
 from app.core.config import get_settings
 from app.files.access import approve_directory, list_directory, metadata, open_file, read_fd
@@ -554,7 +555,7 @@ def test_public_bind_is_refused(database_file, monkeypatch):
     monkeypatch.setenv("API_HOST", "0.0.0.0")
     get_settings.cache_clear()
     with pytest.raises(RuntimeError, match="localhost"):
-        with TestClient(app):
+        with LocalClient(app):
             pass
 
 

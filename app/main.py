@@ -14,6 +14,7 @@ from app.api.routes import (
     tools,
     workspaces,
 )
+from app.core.auth import LocalAuthMiddleware, ServeLease
 from app.core.config import get_settings
 from app.core.database import init_database
 
@@ -25,9 +26,22 @@ async def lifespan(_app: FastAPI):
     host = get_settings().api_host.strip().casefold()
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise RuntimeError(
-            "The API must stay on localhost. Authentication is required before remote access."
+            "The API must stay on localhost. Remote access is not supported."
         )
     init_database()
+    # WP-05A: take the serve lease and load the token before serving anything.
+    lease = ServeLease.acquire()
+    _app.state.auth_token = lease.token
+    try:
+        async with _serving(_app):
+            yield
+    finally:
+        _app.state.auth_token = None
+        lease.release()
+
+
+@asynccontextmanager
+async def _serving(_app: FastAPI):
     from app.approvals.reconcile import reconcile_linked_approvals
     from app.files.journal import reconcile_file_journal
 
@@ -65,6 +79,8 @@ app = FastAPI(
     description="Local-first personal AI assistant backend",
     lifespan=lifespan,
 )
+# Outermost layer: every request except the health check needs the Bearer token.
+app.add_middleware(LocalAuthMiddleware, api_prefix=settings.api_prefix)
 
 app.include_router(health.router, prefix=settings.api_prefix, tags=["System"])
 app.include_router(chat.router, prefix=settings.api_prefix, tags=["Chat"])

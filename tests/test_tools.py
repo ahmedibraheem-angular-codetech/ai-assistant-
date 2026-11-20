@@ -41,6 +41,7 @@ from app.tools.service import ToolService
 from app.tools.web_search import DuckDuckGoSearchProvider, SearchHit, WebSearchTool, parse_duckduckgo
 from tests.db_support import open_sqlite
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 from sqlalchemy.orm import Session
 from tests.test_agents import create_agent
 from tests.test_chat import ollama_chat, use_settings_model
@@ -885,7 +886,7 @@ def test_schema_v5_adds_grants_without_dropping_agent_rows(tmp_path, monkeypatch
     reset_database()
     try:
         init_database()
-        with TestClient(app) as client:
+        with LocalClient(app) as client:
             response = client.get(f"/api/v1/agents/{agent_id}")
             assert response.status_code == 200
             assert response.json()["name"] == "Research Agent"

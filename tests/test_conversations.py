@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 
 from app.core.config import get_settings
 from app.core.database import init_database, reset_database
@@ -362,7 +363,7 @@ def test_migration_from_v1_preserves_agents(tmp_path, monkeypatch):
     reset_database()
     try:
         init_database()
-        with TestClient(app) as client:
+        with LocalClient(app) as client:
             response = client.get(f"/api/v1/agents/{agent_id}")
             assert response.status_code == 200
             assert response.json()["name"] == "Research Agent"

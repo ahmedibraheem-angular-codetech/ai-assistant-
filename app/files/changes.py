@@ -73,6 +73,8 @@ _BLOCKED_NAMES = frozenset(
         "secrets.json",
         "id_rsa",
         "approval.key",
+        "control_plane.token",
+        "control_plane.lock",
         "assistant.db",
     }
 )

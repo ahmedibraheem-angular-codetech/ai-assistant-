@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from tests.client_support import LocalClient
 from sqlalchemy.engine.url import make_url
 
 from app.agents.exceptions import AgentDisabledError
@@ -241,7 +242,7 @@ def test_invalid_input_validation(client):
 
 
 def test_persistence_after_restart(database_file):
-    with TestClient(app) as first_client:
+    with LocalClient(app) as first_client:
         created = create_agent(first_client)
         agent_id = created["id"]
 
@@ -259,7 +260,7 @@ def test_persistence_after_restart(database_file):
 
     init_database()
 
-    with TestClient(app) as restarted:
+    with LocalClient(app) as restarted:
         response = restarted.get(f"/api/v1/agents/{agent_id}")
         assert response.status_code == 200
         body = response.json()

@@ -37,13 +37,28 @@ ollama list
 Copy the exact chat model name from that output into `.env` as `OLLAMA_MODEL=...`.
 Do not use an embedding-only model for chat.
 
-Run the API on localhost only. The API has no authentication. Do not bind it to
-`0.0.0.0`, expose it through a tunnel, or use it remotely until authentication
-and authorization exist. A workspace id is not a security boundary.
+Run the API on localhost only:
 
 ```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m app            # http://127.0.0.1:8000
 ```
+
+### Authentication
+
+Every request needs `Authorization: Bearer <token>`, except
+`GET /api/v1/health`. The token is created on first start in `data/control_plane.token`
+(mode 0600). Requests must use a localhost address, and browser requests from
+other sites are refused. Do not bind to `0.0.0.0` or expose the API through a tunnel.
+
+```bash
+python -m app.control_plane token    # print the token
+python -m app.control_plane rotate   # new token (stop the server first)
+
+TOKEN=$(python -m app.control_plane token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/agents
+```
+
+`/docs` is protected too. Use it from a client that can send the header.
 
 File tools are read-only and can see only directories registered through
 `/api/v1/workspaces`. The home directory and the disk root are not registered
@@ -60,6 +75,7 @@ Open:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/v1/chat \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"message":"عرّف نفسك في سطرين باللهجة المصرية"}'
 ```
