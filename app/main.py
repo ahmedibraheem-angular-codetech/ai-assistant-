@@ -41,7 +41,22 @@ async def lifespan(_app: FastAPI):
     _app.state.auth_token = lease.token
     try:
         async with _serving(_app):
-            yield
+            scheduler = None
+            if get_settings().study_scheduler_enabled:
+                import asyncio
+
+                from app.learning.study import scheduler_loop
+
+                scheduler = asyncio.create_task(scheduler_loop())
+            try:
+                yield
+            finally:
+                if scheduler is not None:
+                    scheduler.cancel()
+                    try:
+                        await scheduler
+                    except BaseException:
+                        pass
     finally:
         _app.state.auth_token = None
         lease.release()

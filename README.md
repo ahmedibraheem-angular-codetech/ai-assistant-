@@ -257,6 +257,25 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/agents/<agen
 Skills saved after untrusted content start as `pending` (your review first).
 Evaluations respect the pause switch and daily budgets.
 
+### Study time (self-learning, part 3)
+
+Give an agent topics and an interval; a background scheduler runs its study
+sessions:
+
+```bash
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/<agent>/study-plan -d '{"topics":["facebook ads","copywriting"],"interval_hours":24}'
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/agents/<agent>/study-now
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/study/digest?hours=24"   # what the team learned
+```
+
+A session evaluates candidate skills, researches up to 3 topics (rotating),
+and saves findings as **pending** lessons for your review (web content is
+untrusted). Research goes through the normal permission gate: without a
+standing approval for `research`, the session leaves an approval request
+instead. Pause and budgets apply. Turn the scheduler off with
+`STUDY_SCHEDULER_ENABLED=false`.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

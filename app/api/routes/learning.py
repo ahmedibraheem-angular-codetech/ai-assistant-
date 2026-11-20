@@ -216,3 +216,57 @@ def agent_profile(agent_id: str, _local: None = Depends(require_local_admin),
         "recent_evaluations": skills.eval_runs(session, canonical)[:10],
         "usage_today": usage_for(canonical),
     }
+
+
+# ------------------------------------------------------------- study time
+
+from app.learning import study  # noqa: E402
+
+
+class StudyPlanUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topics: list[str] = Field(min_length=1, max_length=study.MAX_TOPICS)
+    interval_hours: int = Field(ge=6, le=24 * 30)
+    enabled: bool = True
+
+
+@router.get("/agents/{agent_id}/study-plan")
+def read_study_plan(agent_id: str, _local: None = Depends(require_local_admin),
+                    agents: AgentService = Depends(get_agent_service), session: Session = Depends(get_db)):
+    plan = study.get_plan(session, _agent_id(agents, agent_id))
+    if plan is None:
+        raise HTTPException(status_code=404, detail="This agent has no study plan.")
+    return plan
+
+
+@router.put("/agents/{agent_id}/study-plan")
+def update_study_plan(agent_id: str, payload: StudyPlanUpdate, _local: None = Depends(require_local_admin),
+                      agents: AgentService = Depends(get_agent_service), session: Session = Depends(get_db)):
+    try:
+        return study.set_plan(session, _agent_id(agents, agent_id), payload.topics, payload.interval_hours,
+                              payload.enabled)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/agents/{agent_id}/study-plan", status_code=204)
+def delete_study_plan(agent_id: str, _local: None = Depends(require_local_admin),
+                      agents: AgentService = Depends(get_agent_service), session: Session = Depends(get_db)):
+    if not study.delete_plan(session, _agent_id(agents, agent_id)):
+        raise HTTPException(status_code=404, detail="This agent has no study plan.")
+    return Response(status_code=204)
+
+
+@router.post("/agents/{agent_id}/study-now")
+async def study_now(agent_id: str, _local: None = Depends(require_local_admin),
+                    agents: AgentService = Depends(get_agent_service)):
+    return await study.study_once(_agent_id(agents, agent_id))
+
+
+@router.get("/study/digest")
+def study_digest(hours: int = 24, _local: None = Depends(require_local_admin), session: Session = Depends(get_db)):
+    from datetime import datetime, timedelta, timezone
+
+    since = datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 24 * 30)))
+    return study.digest(session, since)

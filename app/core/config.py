@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     sandbox_python_image: str = "python:3.12-alpine"
     sandbox_node_image: str = "node:22-alpine"
     sandbox_shell_image: str = "alpine:3.20"
+    # Background study scheduler for agents with a study plan.
+    study_scheduler_enabled: bool = True
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

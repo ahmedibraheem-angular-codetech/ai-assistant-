@@ -11,6 +11,7 @@ from app.main import app
 def database_file(tmp_path, monkeypatch):
     path = tmp_path / "agents.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{path}")
+    monkeypatch.setenv("STUDY_SCHEDULER_ENABLED", "false")
     get_settings.cache_clear()
     reset_database()
     yield path
