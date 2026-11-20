@@ -50,6 +50,9 @@ class AgentExecutionService:
         from app.learning.lessons import lessons_block
 
         prompt = compose_system_prompt(prompt, lessons_block(agent.id, message))
+        from app.learning.skills import skills_block
+
+        prompt = compose_system_prompt(prompt, skills_block(agent.id, message))
         context = AgentExecutionContext(
             agent_id=agent.id,
             agent_name=agent.name,

@@ -20,11 +20,12 @@ _COMMON = (
     "session, save important decisions and the next step with record_project_entry. "
     "Use graph_lookup to recall people and organizations, and graph_record to save "
     "relations the user states (who is responsible for what). After a task, if you "
-    "learned something useful for next time, save it in one sentence with record_lesson."
+    "learned something useful for next time, save it in one sentence with record_lesson. "
+    "When you find a procedure that works and will repeat, save it with save_skill."
 )
 
 
-_PROJECT_TOOLS = ("project_brief", "record_project_entry", "graph_lookup", "graph_record", "record_lesson")
+_PROJECT_TOOLS = ("project_brief", "record_project_entry", "graph_lookup", "graph_record", "record_lesson", "save_skill")
 
 
 @dataclass(frozen=True)

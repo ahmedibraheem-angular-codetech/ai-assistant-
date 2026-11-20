@@ -236,6 +236,27 @@ knowledge, other agents, program output) is saved as `pending` and is not
 used until you approve it, so a malicious page cannot plant a lasting rule.
 Lessons are reference data and never change permissions.
 
+### Skills and evaluations (self-learning, part 2)
+
+Agents save reusable procedures with `save_skill`. Each save is a new version
+and starts as a **candidate**; it is used only after it passes the agent's
+evaluation cases (or you activate it). Evaluations run the model without
+tools (no side effects), compare current skills vs the candidate, and promote
+only if the score does not drop; otherwise the candidate is rejected and the
+old version stays.
+
+```bash
+# a test the agent must pass: the answer must include "EGP"
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/agents/<agent>/eval-cases -d '{"prompt":"Summarize invoice 7","must_include":["EGP"]}'
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/skills/<skill>/evaluate
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/skills/<skill>/rollback
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/agents/<agent>/profile   # the agent's CV
+```
+
+Skills saved after untrusted content start as `pending` (your review first).
+Evaluations respect the pause switch and daily budgets.
+
 ## Known limits (by design)
 
 - **MCP call timeouts (R-02):** if an MCP tool call times out, its result is

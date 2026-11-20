@@ -104,6 +104,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 22:
         upgrade_to_22(engine)
         return
+    if version == 23:
+        upgrade_to_23(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -239,6 +242,14 @@ def upgrade_to_22(engine: Engine) -> None:
     from app.learning.lessons import AgentLessonRecord
 
     AgentLessonRecord.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_23(engine: Engine) -> None:
+    """Add skills, eval cases, and eval runs. No existing table is rewritten."""
+    from app.learning.skills import AgentEvalCaseRecord, AgentEvalRunRecord, AgentSkillRecord
+
+    for model in (AgentSkillRecord, AgentEvalCaseRecord, AgentEvalRunRecord):
+        model.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:
