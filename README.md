@@ -276,6 +276,28 @@ standing approval for `research`, the session leaves an approval request
 instead. Pause and budgets apply. Turn the scheduler off with
 `STUDY_SCHEDULER_ENABLED=false`.
 
+## Analytics (dashboard data)
+
+One read-only call returns everything the Mac app's home page shows:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analytics/summary?range=7d"   # today | 7d | 30d
+```
+
+- `kpis`: chat turns and new conversations (with the previous period),
+  tool actions with success rate, pending approvals (and the oldest), new
+  lessons, today's budget use.
+- `agents`: each agent with its team members, turns, tool actions, pending
+  lessons, active skills, study runs, last activity and today's usage.
+- `systems`: memory, knowledge, projects, graph, denied tool calls.
+- `queue`: the latest 8 approval requests. `trend`: hourly (today) or daily
+  buckets of chat turns and finished tool actions. `tools`: most used tools.
+  `learning`: lessons, skills, study runs, new memories.
+
+Limits: tool numbers come from approval requests and the permission audit.
+Tool calls that run without an approval are not logged yet, so they are not
+counted. Budget use is today's in-memory counter (it resets on restart).
+
 ## Mac app (phase 5, in progress)
 
 `desktop/` is an Angular + Tauri 2 app. Slice 1 has the chat page
