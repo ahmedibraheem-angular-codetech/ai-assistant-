@@ -114,3 +114,57 @@ export interface AnalyticsSummary {
     memories_added: number;
   };
 }
+
+// Approvals (see app/approvals/service.py to_public and review.py).
+
+export interface ApprovalReview {
+  reviewable: boolean;
+  verified: boolean;
+  mcp_execution_available: boolean;
+  arguments_text: string | null;
+  hidden: string[] | number | null;
+  warnings: string[];
+  mcp: { applies: boolean };
+}
+
+export interface ApprovalChange {
+  operation: 'create' | 'update' | 'delete';
+  relative_path: string;
+  size_bytes: number;
+  diff: string;
+}
+
+export interface Approval {
+  id: string;
+  agent_id: string | null;
+  tool_name: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  description: string;
+  change: ApprovalChange | null;
+  risk: string;
+  reason: string;
+  mode: string;
+  status: string;
+  created_at: string;
+  expires_at: string | null;
+  decided_at: string | null;
+  execution_status: string | null;
+  result: string | null;
+  outcome?: string;
+  output?: unknown;
+  review: ApprovalReview;
+}
+
+export interface ApprovalList {
+  approvals: Approval[];
+  count: number;
+}
+
+export interface AgentSummary {
+  id: string;
+  name: string;
+  role: string;
+  enabled: boolean;
+}

@@ -1,0 +1,120 @@
+<header class="top">
+  <div class="title">
+    <h1>الموافقات</h1>
+    <p class="muted">كل أداة تغيّر شيئاً أو تشغّل كوداً تنتظر قرارك هنا. لا شيء يُنفذ بدون موافقتك.</p>
+  </div>
+  <div class="segmented" role="tablist" aria-label="عرض">
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'pending'" (click)="showTab('pending')">
+      بانتظارك @if (store.pending().length) {<span class="count">{{ store.pending().length }}</span>}
+    </button>
+    <button type="button" role="tab" [attr.aria-selected]="tab() === 'history'" (click)="showTab('history')">السجل</button>
+  </div>
+</header>
+
+@if (error() || store.error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() || store.error() }}</p>
+}
+@if (notice(); as n) {
+  <div class="banner" [class]="'banner ' + n.tone" role="status">
+    <strong dir="auto">{{ n.text }}</strong>
+    @if (n.detail) {
+      <pre dir="auto">{{ n.detail }}</pre>
+    }
+  </div>
+}
+
+<div class="split">
+  <section class="list" [attr.aria-label]="tab() === 'pending' ? 'الطلبات المعلقة' : 'السجل'">
+    @for (a of list(); track a.id) {
+      <button type="button" class="item" [attr.aria-pressed]="selected()?.id === a.id" (click)="select(a.id)">
+        <span class="item-head">
+          <span class="mono tool">{{ a.tool_name }}</span>
+          <span class="badge" [class]="'badge tone-' + (tab() === 'pending' ? risk(a.risk).tone : status(a).tone)">
+            {{ tab() === 'pending' ? risk(a.risk).label : status(a).label }}
+          </span>
+        </span>
+        <span class="desc" dir="auto">{{ a.description }}</span>
+        <span class="small muted">{{ agent(a) }} · {{ when(a) }}@if (tab() === 'pending' && timeLeft(a.expires_at)) { · {{ timeLeft(a.expires_at) }}}</span>
+      </button>
+    } @empty {
+      <div class="empty">
+        @if (tab() === 'pending') {
+          <p>لا شيء بانتظارك.</p>
+          <p class="small muted">عندما يطلب وكيل أداة تحتاج موافقة، تظهر هنا فوراً.</p>
+        } @else {
+          <p>لا يوجد سجل بعد.</p>
+        }
+      </div>
+    }
+  </section>
+
+  @if (selected(); as a) {
+    <article class="detail" aria-labelledby="detail-h">
+      <div class="detail-head">
+        <h2 id="detail-h" dir="auto">{{ a.description || a.tool_name }}</h2>
+        <span class="badge" [class]="'badge tone-' + risk(a.risk).tone">{{ risk(a.risk).label }}</span>
+      </div>
+
+      <dl class="facts">
+        <div><dt>الأداة</dt><dd class="mono">{{ a.tool_name }}</dd></div>
+        <div><dt>الوكيل</dt><dd>{{ agent(a) }}</dd></div>
+        <div><dt>العملية</dt><dd class="mono">{{ a.action }}</dd></div>
+        <div><dt>الحالة</dt><dd>{{ status(a).label }}</dd></div>
+        @if (a.reason) {
+          <div class="wide"><dt>لماذا يحتاج موافقة</dt><dd dir="auto">{{ a.reason }}</dd></div>
+        }
+      </dl>
+
+      @if (changeTitle(a); as title) {
+        <section class="block">
+          <h3>التغيير</h3>
+          <p class="mono small" dir="ltr">{{ title }}</p>
+          @if (a.change?.diff) {
+            <pre dir="ltr">{{ a.change?.diff }}</pre>
+          }
+        </section>
+      }
+
+      @if (a.review.arguments_text) {
+        <section class="block">
+          <h3>المدخلات المختومة</h3>
+          <pre dir="ltr">{{ a.review.arguments_text }}</pre>
+          @if (hiddenCount(a)) {
+            <p class="small muted">{{ hiddenCount(a) }} قيمة مخفية لأنها قد تكون سرية.</p>
+          }
+        </section>
+      }
+
+      @if (a.review.warnings.length) {
+        <ul class="warnings" role="list">
+          @for (w of a.review.warnings; track w) {
+            <li dir="auto">{{ w }}</li>
+          }
+        </ul>
+      }
+
+      @if (a.result && a.status !== 'PENDING') {
+        <section class="block">
+          <h3>النتيجة</h3>
+          <pre dir="auto">{{ a.result }}</pre>
+        </section>
+      }
+
+      @if (a.status === 'PENDING') {
+        <div class="actions">
+          @if (!check().ok) {
+            <p class="small why" dir="auto">{{ check().why }}</p>
+          }
+          @if (confirming()) {
+            <p class="confirm">تنفيذ <span class="mono">{{ a.tool_name }}</span> الآن؟ قد لا يمكن التراجع عن بعض الآثار.</p>
+            <button type="button" class="primary" [disabled]="deciding()" (click)="approve()">{{ deciding() ? 'جارٍ التنفيذ…' : 'نعم، نفّذ' }}</button>
+            <button type="button" [disabled]="deciding()" (click)="confirming.set(false)">تراجع</button>
+          } @else {
+            <button type="button" class="primary" [disabled]="!check().ok || deciding()" (click)="askConfirm()">وافق</button>
+            <button type="button" class="reject" [disabled]="deciding()" (click)="reject()">{{ deciding() ? 'لحظة…' : 'ارفض' }}</button>
+          }
+        </div>
+      }
+    </article>
+  }
+</div>

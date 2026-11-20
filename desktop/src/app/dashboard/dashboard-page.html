@@ -92,7 +92,7 @@
     </article>
 
     <article class="card queue" aria-labelledby="q-h">
-      <div class="card-head"><h2 id="q-h">آخر الإجراءات</h2></div>
+      <div class="card-head"><h2 id="q-h">آخر الإجراءات</h2><a routerLink="/approvals" class="small">افتح الموافقات</a></div>
       @for (q of queue(); track q.id) {
         <div class="row" [class]="'row tone-' + q.tone">
           <span class="initial" aria-hidden="true">{{ q.initial }}</span>

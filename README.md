@@ -305,7 +305,15 @@ page and the chat page. The home page reads `/api/v1/analytics/summary`:
 KPI rings, a map of the assistant with its agents and systems (click a node
 for its numbers), the latest approval actions, an activity chart, the most
 used tools, learning and memory, a range switch (today / 7 days / 30 days),
-and a pause/resume button. It refreshes every 30 seconds. Dark and light
+and a pause/resume button. It refreshes every 30 seconds.
+
+The **approvals page** (`/approvals`, with a count badge in the side menu)
+lists pending requests and the history. A request shows its tool, agent,
+risk, reason, the sealed arguments (secret values hidden), a file-change
+preview and the server's integrity warnings. Approve takes two clicks
+because it runs the operation; requests that fail verification, cannot be
+reviewed, or are MCP operations (review only) offer reject only. The badge
+polls `/api/v1/approvals` every 15 seconds. Dark and light
 themes switch from the side menu; all colours are tokens in
 `desktop/src/styles.css`. Start the server, then:
 

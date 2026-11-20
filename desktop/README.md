@@ -19,6 +19,8 @@ Layout:
   server summary into cards, map nodes, rows and chart lines (pure functions,
   unit-tested); a new widget is one more builder there.
 - `src/app/shared/line-chart.ts`: SVG line chart (tooltip, screen-reader table).
+- `src/app/approvals/`: approvals page (`approvals-view.ts` holds the rules: risk, status, whether approve is offered).
+- `src/app/core/approvals-store.ts`: pending list shared by the menu badge and the page.
 - `src/app/chat/`: chat page (`/chat`, `/chat/<id>`, one route, so the page is not rebuilt).
 - `src/app/core/api.ts`: the only way to reach the API (Tauri `api_request`).
 - `src/app/core/theme.ts` + `src/styles.css`: dark/light tokens.

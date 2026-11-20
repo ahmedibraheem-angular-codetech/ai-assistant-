@@ -1,5 +1,6 @@
 import { Routes, UrlMatchResult, UrlSegment } from '@angular/router';
 
+import { ApprovalsPage } from './approvals/approvals-page';
 import { ChatPage } from './chat/chat-page';
 import { DashboardPage } from './dashboard/dashboard-page';
 
@@ -19,5 +20,6 @@ export function chatMatcher(segments: UrlSegment[]): UrlMatchResult | null {
 export const routes: Routes = [
   { path: '', pathMatch: 'full', component: DashboardPage, title: 'لوحة التحليلات' },
   { matcher: chatMatcher, component: ChatPage, title: 'المحادثة' },
+  { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
   { path: '**', redirectTo: '' },
 ];

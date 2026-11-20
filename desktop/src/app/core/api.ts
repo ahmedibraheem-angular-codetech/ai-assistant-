@@ -1,7 +1,16 @@
 import { Injectable, InjectionToken, inject } from '@angular/core';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
-import { AnalyticsRange, AnalyticsSummary, ChatReply, ConversationList, MessageList } from './models';
+import {
+  AgentSummary,
+  AnalyticsRange,
+  AnalyticsSummary,
+  Approval,
+  ApprovalList,
+  ChatReply,
+  ConversationList,
+  MessageList,
+} from './models';
 
 /**
  * Calls a Tauri command. Injected so tests can replace it.
@@ -52,6 +61,7 @@ function detailText(body: unknown): string {
   if (body && typeof body === 'object' && 'detail' in body) {
     const detail = (body as { detail: unknown }).detail;
     if (typeof detail === 'string') return detail;
+    if (detail && typeof detail === 'object' && 'message' in detail) return String((detail as { message: unknown }).message);
     if (Array.isArray(detail)) {
       return detail
         .map((item) => (item && typeof item === 'object' && 'msg' in item ? String(item.msg) : String(item)))
@@ -97,6 +107,27 @@ export class AssistantApi {
 
   analytics(range: AnalyticsRange = '7d'): Promise<AnalyticsSummary> {
     return this.request<AnalyticsSummary>('GET', `/api/v1/analytics/summary?range=${range}`);
+  }
+
+  pendingApprovals(): Promise<ApprovalList> {
+    return this.request<ApprovalList>('GET', '/api/v1/approvals');
+  }
+
+  approvalHistory(): Promise<ApprovalList> {
+    return this.request<ApprovalList>('GET', '/api/v1/approvals/history');
+  }
+
+  /** Runs the sealed operation on the server. Only called after the user confirms. */
+  approve(id: string): Promise<Approval> {
+    return this.request<Approval>('POST', `/api/v1/approvals/${encodeURIComponent(id)}/approve`);
+  }
+
+  reject(id: string): Promise<Approval> {
+    return this.request<Approval>('POST', `/api/v1/approvals/${encodeURIComponent(id)}/reject`);
+  }
+
+  agents(): Promise<{ agents: AgentSummary[]; count: number }> {
+    return this.request('GET', '/api/v1/agents');
   }
 
   conversations(limit = 50): Promise<ConversationList> {
