@@ -294,9 +294,14 @@ curl -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/api/v1/analytics/s
   buckets of chat turns and finished tool actions. `tools`: most used tools.
   `learning`: lessons, skills, study runs, new memories.
 
-Limits: tool numbers come from approval requests and the permission audit.
-Tool calls that run without an approval are not logged yet, so they are not
-counted. Budget use is today's in-memory counter (it resets on restart).
+Tool numbers come from the **tool run log** (`tool_runs`, schema 25): one
+row per run that started, with or without an approval: tool, agent, status
+(`ok`, `error`, `timeout`, or `refused` when pause or a budget stopped it),
+duration, approval id and a short error. Arguments and outputs are never
+stored. During a chat turn the row is written in the turn's own session, so
+it commits with the turn and never waits for SQLite's write lock. Runs from
+before schema 25 were not logged. Budget use is today's in-memory counter
+(it resets on restart).
 
 ## Mac app (phase 5, in progress)
 

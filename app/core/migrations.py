@@ -110,6 +110,9 @@ def apply_migration(engine: Engine, version: int) -> None:
     if version == 24:
         upgrade_to_24(engine)
         return
+    if version == 25:
+        upgrade_to_25(engine)
+        return
     raise RuntimeError(
         f"No migration is registered for schema version {version}. Existing data was left unchanged."
     )
@@ -261,6 +264,13 @@ def upgrade_to_24(engine: Engine) -> None:
 
     for model in (AgentStudyPlanRecord, AgentStudyRunRecord):
         model.__table__.create(bind=engine, checkfirst=True)
+
+
+def upgrade_to_25(engine: Engine) -> None:
+    """Add the tool run log. No existing table is rewritten."""
+    from app.tools.runs import ToolRunRecord
+
+    ToolRunRecord.__table__.create(bind=engine, checkfirst=True)
 
 
 def upgrade_to_10(engine: Engine) -> None:

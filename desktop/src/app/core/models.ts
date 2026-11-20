@@ -89,7 +89,14 @@ export interface AnalyticsSummary {
   kpis: {
     chat_turns: CountWithPrevious;
     conversations: CountWithPrevious;
-    tool_actions: { value: number; completed: number; failed: number; success_rate: number | null };
+    tool_actions: {
+      value: number;
+      completed: number;
+      failed: number;
+      refused?: number;
+      success_rate: number | null;
+      avg_duration_ms?: number | null;
+    };
     approvals_pending: { value: number; oldest_at: string | null };
     lessons_new: { value: number; pending: number };
     budget: { tool_calls_used: number; tool_calls_limit: number; chat_turns_used: number; chat_turns_limit: number };
@@ -104,7 +111,7 @@ export interface AnalyticsSummary {
   };
   queue: QueueItem[];
   trend: { step: 'hour' | 'day'; starts: string[]; chat_turns: number[]; tool_completed: number[]; tool_failed: number[] };
-  tools: { tool: string; actions: number; failed: number; denied: number }[];
+  tools: { tool: string; actions: number; failed: number; denied: number; avg_duration_ms?: number | null }[];
   learning: {
     lessons_active: number;
     lessons_pending: number;

@@ -1,4 +1,4 @@
-import { ago, kpiCards, mapNodes, MAX_AGENTS_ON_MAP, queueRows, toolBars, trendLabels, trendSeries } from './dashboard-view';
+import { ago, kpiCards, seconds, mapNodes, MAX_AGENTS_ON_MAP, queueRows, toolBars, trendLabels, trendSeries } from './dashboard-view';
 import { NOW, agent, summary } from './summary.testing';
 
 describe('kpiCards', () => {
@@ -82,9 +82,18 @@ describe('queue, trend and tools', () => {
 
   it('scales tool bars to the busiest tool and counts denials', () => {
     expect(toolBars(summary())).toEqual([
-      { tool: 'run_code', total: '3', width: 100, failed: 1 },
-      { tool: 'write_file', total: '2', width: 67, failed: 1 },
+      { tool: 'run_code', total: '3', width: 100, failed: 1, time: '' },
+      { tool: 'write_file', total: '2', width: 67, failed: 1, time: '' },
     ]);
+  });
+
+  it('shows average tool time when the server sends it', () => {
+    const s = summary();
+    s.kpis.tool_actions.avg_duration_ms = 420;
+    s.tools[0].avg_duration_ms = 2600;
+    expect(kpiCards(s, NOW)[1].note).toBe('3 تمت · 1 فشلت · متوسط 0.4ث');
+    expect(toolBars(s)[0].time).toBe('2.6ث');
+    expect(seconds(75_000)).toBe('1.3د');
   });
 
   it('formats time since', () => {

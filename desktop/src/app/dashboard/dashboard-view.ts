@@ -53,6 +53,12 @@ export const MAX_AGENTS_ON_MAP = 8;
 const number = new Intl.NumberFormat('ar-EG-u-nu-latn');
 export const fmt = (value: number): string => number.format(value);
 
+/** 420 -> "0.4ث", 2600 -> "2.6ث", 75000 -> "1.3د". */
+export function seconds(ms: number): string {
+  if (ms >= 60_000) return `${(ms / 60_000).toFixed(1)}د`;
+  return `${(ms / 1000).toFixed(1)}ث`;
+}
+
 export function ago(iso: string | null, now: Date = new Date()): string {
   if (!iso) return '—';
   const seconds = Math.max(0, (now.getTime() - new Date(iso).getTime()) / 1000);
@@ -84,7 +90,9 @@ export function kpiCards(s: AnalyticsSummary, now: Date = new Date()): KpiCard[]
     {
       id: 'success', label: 'نجاح الأدوات', value: rate === null ? '—' : `${Math.round(rate * 100)}%`, ring: rate ?? 0,
       ringText: rate === null ? '—' : `${Math.round(rate * 100)}%`,
-      note: k.tool_actions.value ? `${fmt(k.tool_actions.completed)} تمت · ${fmt(k.tool_actions.failed)} فشلت` : 'لا إجراءات بعد',
+      note: k.tool_actions.value
+        ? `${fmt(k.tool_actions.completed)} تمت · ${fmt(k.tool_actions.failed)} فشلت${k.tool_actions.avg_duration_ms ? ` · متوسط ${seconds(k.tool_actions.avg_duration_ms)}` : ''}`
+        : 'لا إجراءات بعد',
       tone: 'teal', noteTone: k.tool_actions.failed ? 'warn' : 'muted',
     },
     {
@@ -218,8 +226,11 @@ export function hasTrendData(s: AnalyticsSummary): boolean {
   return [...s.trend.chat_turns, ...s.trend.tool_completed, ...s.trend.tool_failed].some((v) => v > 0);
 }
 
-export function toolBars(s: AnalyticsSummary): { tool: string; total: string; width: number; failed: number }[] {
+export function toolBars(s: AnalyticsSummary): { tool: string; total: string; width: number; failed: number; time: string }[] {
   const totals = s.tools.map((t) => t.actions + t.denied);
   const top = Math.max(1, ...totals);
-  return s.tools.map((t, i) => ({ tool: t.tool, total: fmt(totals[i]), width: Math.round((totals[i] / top) * 100), failed: t.failed + t.denied }));
+  return s.tools.map((t, i) => ({
+    tool: t.tool, total: fmt(totals[i]), width: Math.round((totals[i] / top) * 100), failed: t.failed + t.denied,
+    time: t.avg_duration_ms ? seconds(t.avg_duration_ms) : '',
+  }));
 }

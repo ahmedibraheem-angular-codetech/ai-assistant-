@@ -4,11 +4,9 @@ One call gathers everything the home page shows: headline numbers, the team
 and the systems around the assistant, the latest actions, a time series, the
 most used tools, and learning and memory counts. It only reads.
 
-Limits, stated so the numbers are not over-read:
-- Tool numbers come from approval requests and the permission audit. Tool
-  calls that run without an approval are not logged anywhere yet, so they are
-  not counted.
-- Budget usage is the in-memory counter of today (it resets on restart).
+Tool numbers come from the tool run log (schema 25): every run that started,
+with or without an approval. Runs from before schema 25 were not logged.
+Budget usage is the in-memory counter of today (it resets on restart).
 """
 
 from __future__ import annotations
@@ -31,14 +29,14 @@ from app.learning.study import AgentStudyRunRecord
 from app.memories.models import MemoryRecord
 from app.permissions.models import PermissionAuditRecord
 from app.projects.core import ProjectEntryRecord, ProjectRecord
+from app.tools.runs import REFUSED, ToolRunRecord
 
 RANGES = {"today": (timedelta(hours=24), timedelta(hours=1), 24), "7d": (timedelta(days=7), timedelta(days=1), 7),
           "30d": (timedelta(days=30), timedelta(days=1), 30)}
 QUEUE_SIZE = 8
 TOP_TOOLS = 6
-DONE = ("COMPLETED",)
-FAILED = ("FAILED",)
-TOOL_EVENTS = ("approval_required", "denied")
+OK = "ok"
+FAILED_RUNS = ("error", "timeout")
 
 
 def _naive(moment: datetime) -> datetime:
@@ -73,13 +71,15 @@ def summary(session: Session, range_name: str = "7d", now: datetime | None = Non
         return _count(session, select(func.count()).select_from(ConversationRecord)
                       .where(ConversationRecord.created_at >= start, ConversationRecord.created_at < stop))
 
-    finished = session.execute(
-        select(ApprovalRequestRecord.tool_name, ApprovalRequestRecord.status, ApprovalRequestRecord.agent_id,
-               ApprovalRequestRecord.created_at)
-        .where(ApprovalRequestRecord.created_at >= since)
+    runs = session.execute(
+        select(ToolRunRecord.tool_name, ToolRunRecord.status, ToolRunRecord.agent_id,
+               ToolRunRecord.created_at, ToolRunRecord.duration_ms)
+        .where(ToolRunRecord.created_at >= since)
     ).all()
-    completed = sum(1 for row in finished if row.status in DONE)
-    failed = sum(1 for row in finished if row.status in FAILED)
+    completed = sum(1 for row in runs if row.status == OK)
+    failed = sum(1 for row in runs if row.status in FAILED_RUNS)
+    refused = sum(1 for row in runs if row.status == REFUSED)
+    timed = [row.duration_ms for row in runs if row.status == OK]
 
     pending_rows = session.execute(
         select(ApprovalRequestRecord.created_at).where(ApprovalRequestRecord.status == "PENDING")
@@ -102,8 +102,9 @@ def summary(session: Session, range_name: str = "7d", now: datetime | None = Non
             "chat_turns": {"value": turns(since, end), "previous": turns(before, since)},
             "conversations": {"value": conversations(since, end), "previous": conversations(before, since)},
             "tool_actions": {
-                "value": completed + failed, "completed": completed, "failed": failed,
+                "value": completed + failed, "completed": completed, "failed": failed, "refused": refused,
                 "success_rate": round(completed / (completed + failed), 3) if completed + failed else None,
+                "avg_duration_ms": round(sum(timed) / len(timed)) if timed else None,
             },
             "approvals_pending": {"value": len(pending_rows),
                                   "oldest_at": _iso(pending_rows[0].created_at) if pending_rows else None},
@@ -113,8 +114,8 @@ def summary(session: Session, range_name: str = "7d", now: datetime | None = Non
         "agents": agents,
         "systems": _systems(session, since),
         "queue": _queue(session, {a["id"]: a["name"] for a in agents}),
-        "trend": _trend(session, finished, since, step, buckets),
-        "tools": _tools(session, finished, since),
+        "trend": _trend(session, runs, since, step, buckets),
+        "tools": _tools(session, runs, since),
         "learning": _learning(session, since),
     }
 
@@ -131,8 +132,8 @@ def _agents(session: Session, since: datetime) -> list[dict]:
     turns = per_agent(MessageRecord.agent_id, select(MessageRecord.agent_id, func.count())
                       .where(MessageRecord.role == "assistant", MessageRecord.created_at >= since))
     last = per_agent(MessageRecord.agent_id, select(MessageRecord.agent_id, func.max(MessageRecord.created_at)))
-    actions = per_agent(ApprovalRequestRecord.agent_id, select(ApprovalRequestRecord.agent_id, func.count())
-                        .where(ApprovalRequestRecord.created_at >= since))
+    actions = per_agent(ToolRunRecord.agent_id, select(ToolRunRecord.agent_id, func.count())
+                        .where(ToolRunRecord.created_at >= since, ToolRunRecord.status != REFUSED))
     pending_lessons = per_agent(AgentLessonRecord.agent_id, select(AgentLessonRecord.agent_id, func.count())
                                 .where(AgentLessonRecord.status == "pending"))
     active_skills = per_agent(AgentSkillRecord.agent_id, select(AgentSkillRecord.agent_id, func.count())
@@ -204,7 +205,7 @@ def _queue(session: Session, names: dict[str, str]) -> list[dict]:
     } for row in rows]
 
 
-def _trend(session: Session, finished, since: datetime, step: timedelta, buckets: int) -> dict:
+def _trend(session: Session, runs, since: datetime, step: timedelta, buckets: int) -> dict:
     def index(moment: datetime) -> int | None:
         position = int((_naive(moment) - since) / step)
         return position if 0 <= position < buckets else None
@@ -217,13 +218,13 @@ def _trend(session: Session, finished, since: datetime, step: timedelta, buckets
         slot = index(moment)
         if slot is not None:
             turns[slot] += 1
-    for row in finished:
+    for row in runs:
         slot = index(row.created_at)
         if slot is None:
             continue
-        if row.status in DONE:
+        if row.status == OK:
             done[slot] += 1
-        elif row.status in FAILED:
+        elif row.status in FAILED_RUNS:
             failed[slot] += 1
     return {
         "step": "hour" if step == timedelta(hours=1) else "day",
@@ -232,13 +233,18 @@ def _trend(session: Session, finished, since: datetime, step: timedelta, buckets
     }
 
 
-def _tools(session: Session, finished, since: datetime) -> list[dict]:
+def _tools(session: Session, runs, since: datetime) -> list[dict]:
     uses: Counter[str] = Counter()
     failures: Counter[str] = Counter()
-    for row in finished:
+    durations: dict[str, list[int]] = {}
+    for row in runs:
+        if row.status == REFUSED:
+            continue
         uses[row.tool_name] += 1
-        if row.status in FAILED:
+        if row.status in FAILED_RUNS:
             failures[row.tool_name] += 1
+        elif row.status == OK:
+            durations.setdefault(row.tool_name, []).append(row.duration_ms)
     denied = session.execute(
         select(PermissionAuditRecord.tool_name, func.count())
         .where(PermissionAuditRecord.event == "denied", PermissionAuditRecord.created_at >= since,
@@ -249,8 +255,12 @@ def _tools(session: Session, finished, since: datetime) -> list[dict]:
     for name in denials:
         uses.setdefault(name, 0)
     ranked = sorted(uses, key=lambda name: (-(uses[name] + denials.get(name, 0)), name))[:TOP_TOOLS]
-    return [{"tool": name, "actions": uses[name], "failed": failures[name], "denied": denials.get(name, 0)}
-            for name in ranked]
+    def average(name):
+        values = durations.get(name)
+        return round(sum(values) / len(values)) if values else None
+
+    return [{"tool": name, "actions": uses[name], "failed": failures[name], "denied": denials.get(name, 0),
+             "avg_duration_ms": average(name)} for name in ranked]
 
 
 def _learning(session: Session, since: datetime) -> dict:

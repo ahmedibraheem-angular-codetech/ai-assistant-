@@ -126,11 +126,11 @@
       <div class="card-head"><h2 id="tools-h">أكثر الأدوات استخداماً</h2></div>
       @for (t of tools(); track t.tool) {
         <div class="bar">
-          <div class="bar-head small"><span class="mono">{{ t.tool }}</span><span class="muted">{{ t.total }}</span></div>
+          <div class="bar-head small"><span class="mono">{{ t.tool }}</span><span class="muted">{{ t.total }}@if (t.time) { · {{ t.time }}}</span></div>
           <div class="bar-track"><div class="bar-fill" [style.width.%]="t.width"></div></div>
         </div>
       } @empty {
-        <p class="empty small muted">لا استخدام للأدوات بعد. تظهر هنا الأدوات التي تمر بالموافقات.</p>
+        <p class="empty small muted">لا استخدام للأدوات في هذه الفترة.</p>
       }
     </article>
 

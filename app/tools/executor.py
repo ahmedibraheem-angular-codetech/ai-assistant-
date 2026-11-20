@@ -23,6 +23,7 @@ import math
 import os
 import signal
 import sys
+import time
 from pathlib import Path
 
 from app.core.config import get_settings
@@ -137,12 +138,36 @@ class ToolExecutor:
         if side_effect and not confirmed:
             return ToolOutcome(tool.name, "confirmation_required", None, _CONFIRMATION)
         # Kill switch and daily budget: checked and counted only when a tool
-        # will actually start. No database write happens here.
+        # will actually start. Each run that gets this far is logged in
+        # tool_runs (app/tools/runs.py), in the request's session when bound.
         from app.core.controls import consume_tool_call
+        from app.tools.runs import REFUSED, record_run
 
+        started = time.monotonic()
         refused = consume_tool_call(agent_id)
         if refused is not None:
+            record_run(tool.name, agent_id=agent_id, status=REFUSED, started=started, approval_id=approval_id, error=refused)
             return ToolOutcome(tool.name, "error", None, refused)
+        try:
+            outcome = await self._start(tool, arguments, timeout, policy, side_effect, agent_id, approval_id)
+        except BaseException as exc:
+            record_run(tool.name, agent_id=agent_id, status="error", started=started, approval_id=approval_id,
+                       error=type(exc).__name__)
+            raise
+        record_run(tool.name, agent_id=agent_id, status=outcome.status, started=started, approval_id=approval_id,
+                   error=outcome.error)
+        return outcome
+
+    async def _start(
+        self,
+        tool: Tool,
+        arguments: dict,
+        timeout: float,
+        policy: str,
+        side_effect: bool,
+        agent_id: str | None,
+        approval_id: str | None,
+    ) -> ToolOutcome:
         if side_effect:
             if policy != SIDE_EFFECT or not _can_isolate(tool):
                 return ToolOutcome(tool.name, "error", None, _UNISOLATED)
