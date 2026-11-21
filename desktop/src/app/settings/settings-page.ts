@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 
 import { AssistantApi } from '../core/api';
 import { Agent, AgentBudget, StandingApproval } from '../core/models';
+import { VoiceService } from '../core/voice';
 import {
   hasLimits, standingExpiry, standingScope, usagePercent, usageText, usageTone,
   validateBudget, validateStanding,
@@ -17,6 +18,7 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 })
 export class SettingsPage {
   private readonly api = inject(AssistantApi);
+  readonly voice = inject(VoiceService);
 
   readonly paused = signal<boolean | null>(null);
   readonly agents = signal<Agent[]>([]);
@@ -49,6 +51,15 @@ export class SettingsPage {
     void this.loadControl();
     void this.loadBudgets();
     void this.loadStanding();
+    void this.voice.loadStatus();
+  }
+
+  pickVoice(name: string): void {
+    this.voice.setVoice(name);
+  }
+
+  testVoice(): void {
+    void this.voice.speak('مرحباً، أنا مساعدك الشخصي. هذا اختبار للصوت.');
   }
 
   name(id: string): string {

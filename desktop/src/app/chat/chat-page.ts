@@ -15,6 +15,7 @@ import { Router } from '@angular/router';
 
 import { ApiError, AssistantApi } from '../core/api';
 import { Conversation } from '../core/models';
+import { VoiceService } from '../core/voice';
 
 export interface ChatLine {
   role: 'user' | 'assistant';
@@ -35,6 +36,7 @@ const HEALTH_EVERY_MS = 15_000;
 export class ChatPage {
   private readonly api = inject(AssistantApi);
   private readonly router = inject(Router);
+  readonly voice = inject(VoiceService);
 
   /** Conversation id from the route (`/chat/:id`); empty for a new chat. */
   readonly id = input<string | undefined>();
@@ -66,6 +68,30 @@ export class ChatPage {
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
     void this.checkHealth();
     void this.refreshConversations();
+    void this.voice.loadStatus();
+    inject(DestroyRef).onDestroy(() => {
+      this.voice.stop();
+      this.voice.stopSpeaking();
+    });
+  }
+
+  /** Mic button: press to start, press again to stop; the transcript is sent automatically. */
+  toggleMic(): void {
+    if (this.voice.recording()) return this.voice.stop();
+    void this.voice.start((text) => {
+      this.draft.set(text);
+      void this.send();
+    });
+  }
+
+  toggleAutoread(): void {
+    this.voice.setAutoread(!this.voice.autoread());
+    if (!this.voice.autoread()) this.voice.stopSpeaking();
+  }
+
+  speakLine(line: ChatLine): void {
+    if (this.voice.speaking()) this.voice.stopSpeaking();
+    else void this.voice.speak(line.content);
   }
 
   async checkHealth(): Promise<void> {
@@ -144,6 +170,7 @@ export class ChatPage {
       const reply = await this.api.chat(message, conversationId);
       const meta = [reply.agent_name ?? reply.selected_agent_name, reply.model].filter(Boolean).join(' · ');
       this.replacePending({ role: 'assistant', content: reply.answer, meta });
+      if (this.voice.autoread()) void this.voice.speak(reply.answer);
       if (reply.confirmation_required) {
         this.lines.update((lines) => [
           ...lines,

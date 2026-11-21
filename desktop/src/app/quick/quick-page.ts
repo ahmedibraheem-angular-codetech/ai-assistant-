@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { AssistantApi } from '../core/api';
 import { ApprovalsStore } from '../core/approvals-store';
 import { DesktopBridge } from '../core/desktop';
+import { VoiceService } from '../core/voice';
 
 interface Exchange {
   question: string;
@@ -29,6 +30,7 @@ export class QuickPage {
   private readonly api = inject(AssistantApi);
   private readonly desktop = inject(DesktopBridge);
   readonly approvals = inject(ApprovalsStore);
+  readonly voice = inject(VoiceService);
 
   readonly draft = signal('');
   readonly exchanges = signal<Exchange[]>([]);
@@ -42,7 +44,17 @@ export class QuickPage {
     // The window is reused: focus the box each time it is shown.
     const focus = () => this.input()?.nativeElement.focus();
     window.addEventListener('focus', focus);
-    inject(DestroyRef).onDestroy(() => window.removeEventListener('focus', focus));
+    inject(DestroyRef).onDestroy(() => {
+      window.removeEventListener('focus', focus);
+      this.voice.stop();
+    });
+    void this.voice.loadStatus();
+  }
+
+  /** Mic button: press to start, press again to stop; the transcript is asked automatically. */
+  toggleMic(): void {
+    if (this.voice.recording()) return this.voice.stop();
+    void this.voice.start((text) => void this.ask(text));
   }
 
   onKeydown(event: KeyboardEvent): void {
@@ -66,6 +78,7 @@ export class QuickPage {
       const reply = await this.api.chat(question, this.conversationId());
       if (reply.conversation_id) this.conversationId.set(reply.conversation_id);
       this.finish({ answer: reply.answer, failed: false });
+      if (this.voice.autoread()) void this.voice.speak(reply.answer);
     } catch (error) {
       this.finish({ answer: error instanceof Error ? error.message : String(error), failed: true });
     } finally {

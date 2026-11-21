@@ -39,6 +39,9 @@
             @if (line.meta) {
               <p class="meta" dir="auto">{{ line.meta }}</p>
             }
+            @if (line.role === 'assistant' && line.content && voice.status().tts_ready) {
+              <button type="button" class="speak" aria-label="اقرأ الرد بصوت عالٍ" title="اقرأ بصوت عالٍ" (click)="speakLine(line)">🔊</button>
+            }
             @if (line.failed) {
               <p class="meta">لم تُرسل</p>
             }
@@ -53,8 +56,14 @@
     }
   </section>
 
-  @if (error()) {
-    <p class="error" role="alert" dir="auto">{{ error() }}</p>
+  @if (error() || voice.error()) {
+    <p class="error" role="alert" dir="auto">{{ error() || voice.error() }}</p>
+  }
+  @if (voice.status().tts_ready) {
+    <label class="autoread">
+      <input type="checkbox" [checked]="voice.autoread()" (change)="toggleAutoread()" />
+      اقرأ الردود بصوت عالٍ
+    </label>
   }
 
   <form class="composer" (submit)="$event.preventDefault(); send()">
@@ -70,6 +79,14 @@
       (ngModelChange)="draft.set($event)"
       (keydown)="onKeydown($event)"
     ></textarea>
+    @if (voice.status().stt_ready) {
+      <button type="button" class="mic" [class.on]="voice.recording()" [disabled]="voice.busy() || sending()"
+        [attr.aria-pressed]="voice.recording()" aria-label="إدخال صوتي" (click)="toggleMic()">
+        {{ voice.recording() ? '⏹ ' + voice.elapsed() + 'ث' : voice.busy() ? '…' : '🎤' }}
+      </button>
+    } @else {
+      <button type="button" class="mic" disabled aria-label="إدخال صوتي" title="الإدخال الصوتي غير مُعَدّ">🎤</button>
+    }
     <button type="submit" [disabled]="!canSend()">{{ sending() ? 'جارٍ الإرسال…' : 'أرسل' }}</button>
   </form>
 </main>

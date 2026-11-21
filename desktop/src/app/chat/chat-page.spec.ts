@@ -4,6 +4,8 @@ import { RouterTestingHarness } from '@angular/router/testing';
 
 import { routes } from '../app.routes';
 import { Invoke, TAURI_INVOKE } from '../core/api';
+import { VoiceService } from '../core/voice';
+import { FakeVoice } from '../core/voice-fake';
 import { ChatPage } from './chat-page';
 
 type Handler = (method: string, path: string, body: unknown) => { status: number; body: unknown };
@@ -134,5 +136,22 @@ describe('ChatPage', () => {
     expect(page.canSend()).toBe(false);
     await page.send();
     expect(server.requests).not.toContain('POST /api/v1/chat');
+  });
+});
+
+describe('ChatPage voice', () => {
+  it('mic transcript is sent, replies are read when autoread is on, speaker button reads on demand', async () => {
+    const voice = new FakeVoice();
+    voice.autoread.set(true);
+    TestBed.configureTestingModule({ providers: [{ provide: VoiceService, useValue: voice }] });
+    const { harness, page, element } = await open('/chat');
+    page.toggleMic();
+    voice.callback?.('مرحبا صوتي');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(page.lines().map((l) => l.content)).toEqual(['مرحبا صوتي', 'تم']);
+    expect(voice.spoken).toEqual(['تم']);
+    element.querySelector<HTMLButtonElement>('.speak')?.click();
+    expect(voice.spoken).toEqual(['تم', 'تم']);
   });
 });

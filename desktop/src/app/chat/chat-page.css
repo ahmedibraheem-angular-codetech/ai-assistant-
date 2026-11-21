@@ -149,3 +149,8 @@
   flex: 1;
   resize: none;
 }
+
+.mic { min-width: 44px; }
+.mic.on { background: var(--danger); border-color: var(--danger); color: var(--on-accent); }
+.speak { align-self: flex-start; padding: 0 6px; min-height: 24px; background: transparent; border: 0; font-size: 14px; }
+.autoread { display: flex; gap: 6px; align-items: center; padding: 0 24px; font-size: 13px; color: var(--muted); }

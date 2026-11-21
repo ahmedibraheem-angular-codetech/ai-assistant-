@@ -316,6 +316,15 @@ and a pause/resume button. It refreshes every 30 seconds. **Customize**
 it is saved at once in the app's local storage on this computer and read
 defensively (unknown widgets dropped, new ones appended).
 
+**Voice.** The chat page and the quick window (⌥ Space) have a mic button:
+press to record, press again to stop (it also stops by itself after 60
+seconds); the speech is turned into text and sent at once. Turn on "read
+replies aloud" in chat (or press the speaker on a message) to hear answers; the
+choice is saved on this computer. **Settings > الصوت** shows whether speech is
+ready, lets you pick the voice and test it. Everything runs locally; choose the
+speech model with `VOICE_WHISPER_MODEL` in `.env`. The first time you use the
+mic, macOS asks for microphone permission.
+
 The **team page** (`/team`) shows every agent with today's activity and
 hires new ones from the six templates (name, extra instructions, the
 template's daily budget). An **agent profile** (`/team/<id>`) shows today's

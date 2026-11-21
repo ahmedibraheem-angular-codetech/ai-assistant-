@@ -27,3 +27,6 @@ p { margin: 0; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes blink { 0%, 80%, 100% { opacity: 0.3; } 40% { opacity: 1; } }
+
+.mic { min-width: 40px; min-height: 40px; padding: 0 6px; }
+.mic.on { background: var(--danger); border-color: var(--danger); color: var(--on-accent); }

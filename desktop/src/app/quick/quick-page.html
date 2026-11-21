@@ -23,6 +23,9 @@
       <p class="small muted">Enter للإرسال · ⌘ Enter للمتابعة في النافذة الكاملة · Esc للإخفاء</p>
     </div>
   }
+  @if (voice.error()) {
+    <p class="a failed" role="alert" dir="auto">{{ voice.error() }}</p>
+  }
 </section>
 
 <div class="chips">
@@ -37,5 +40,11 @@
   <label for="quick-input" class="visually-hidden">سؤال سريع</label>
   <textarea #input id="quick-input" name="q" rows="2" dir="auto" autofocus placeholder="اسأل أو أعطِ أمراً…"
     [ngModel]="draft()" (ngModelChange)="draft.set($event)" (keydown)="onKeydown($event)"></textarea>
+  @if (voice.status().stt_ready) {
+    <button type="button" class="mic" [class.on]="voice.recording()" [disabled]="voice.busy() || sending()"
+      [attr.aria-pressed]="voice.recording()" aria-label="إدخال صوتي" (click)="toggleMic()">
+      {{ voice.recording() ? '⏹ ' + voice.elapsed() : voice.busy() ? '…' : '🎤' }}
+    </button>
+  }
   <button type="submit" class="send" [disabled]="sending() || !draft().trim()" aria-label="أرسل">↑</button>
 </form>

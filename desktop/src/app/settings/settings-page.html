@@ -122,3 +122,33 @@
     </form>
   }
 </section>
+
+<section class="card" aria-labelledby="s-voice">
+  <h2 id="s-voice">الصوت</h2>
+  @if (voice.error()) {
+    <p class="banner danger" role="alert" dir="auto">{{ voice.error() }}</p>
+  }
+  <div class="row">
+    <span class="badge" [class.tone-ok]="voice.status().stt_ready" [class.tone-warn]="!voice.status().stt_ready">
+      {{ voice.status().stt_ready ? 'جاهز' : 'غير جاهز' }}
+    </span>
+    <p class="muted grow small" dir="auto">
+      {{ voice.status().stt_ready ? 'نموذج التعرف: ' + voice.status().model : 'الإدخال الصوتي غير مُعَدّ' + (voice.status().model ? ' (النموذج: ' + voice.status().model + ')' : '') }}
+    </p>
+  </div>
+  @if (voice.status().tts_ready) {
+    <div class="row">
+      <label>الصوت
+        <select [value]="voice.voiceName()" (change)="pickVoice(value($event))">
+          <option value="" [selected]="!voice.voiceName()">الافتراضي</option>
+          @for (v of voice.status().voices; track v) {
+            <option [value]="v" [selected]="voice.voiceName() === v">{{ v }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" [disabled]="voice.speaking()" (click)="testVoice()">اختبار الصوت</button>
+    </div>
+  } @else {
+    <p class="muted small">القراءة بصوت عالٍ غير مُعَدّة.</p>
+  }
+</section>
