@@ -298,6 +298,27 @@ of its time; missed days are never backfilled. `last_status` is `ok`, `error`
 or `refused` (paused or over budget). Turn the scheduler off with
 `ROUTINE_SCHEDULER_ENABLED=false`.
 
+### n8n workflows
+
+The assistant can trigger n8n workflows you register, and every run asks for your approval first.
+
+1. In n8n create a workflow that starts with a **Webhook** node. Set the HTTP method (POST or GET) and a path such as `my-flow`. Save and **activate** the workflow (the production URL is `/webhook/<path>`; test URLs `/webhook-test/` are not used).
+2. Register it in the Mac app (Settings, section n8n) or with the API (admin only, agents cannot do this):
+
+```bash
+T=$(cat data/control_plane.token); H="Authorization: Bearer $T"
+curl -s -H "$H" -H 'Content-Type: application/json' http://127.0.0.1:8000/api/v1/n8n/workflows \
+  -d '{"name":"send-report","description":"Mails the daily report","webhook_path":"my-flow","method":"POST"}'
+curl -s -H "$H" http://127.0.0.1:8000/api/v1/n8n/status      # pings {base}/healthz
+# also: GET /n8n/workflows, PATCH/DELETE /n8n/workflows/{id}
+```
+
+3. Give the tool to an agent explicitly (it is not in any template): `PUT /api/v1/agents/{id}/tools` with `run_n8n_workflow` in `allowed_tools`. The agent then calls `run_n8n_workflow` with `{"workflow": "send-report", "payload": {...}}`. The approval card shows the workflow, its description, method, path and the payload. Only after you approve does the assistant call `{N8N_BASE_URL}/webhook/{path}` (POST with a JSON body, or GET with no body). Standing approvals never cover it. The reply (status code and text, cut to `N8N_MAX_RESPONSE_CHARS`) is untrusted data.
+
+Docker note: n8n runs in Docker with port 5678 published; the assistant runs on the Mac and calls it on `http://127.0.0.1:5678`. The base URL must be loopback (http or https), otherwise runs are refused. No redirects, no proxy.
+
+Settings (env): `N8N_BASE_URL` (default `http://127.0.0.1:5678`), `N8N_TIMEOUT_SECONDS` (30), `N8N_MAX_PAYLOAD_BYTES` (64000), `N8N_MAX_RESPONSE_CHARS` (4000).
+
 ## Analytics (dashboard data)
 
 One read-only call returns everything the Mac app's home page shows:

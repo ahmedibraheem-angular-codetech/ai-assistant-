@@ -1,6 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 
 import { AssistantApi } from '../core/api';
+import { N8nSection } from './n8n-section';
 import { Agent, AgentBudget, StandingApproval } from '../core/models';
 import { VoiceService } from '../core/voice';
 import {
@@ -13,6 +14,7 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 
 @Component({
   selector: 'app-settings-page',
+  imports: [N8nSection],
   templateUrl: './settings-page.html',
   styleUrl: './settings-page.css',
 })

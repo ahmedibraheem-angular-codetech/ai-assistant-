@@ -8,6 +8,9 @@ import {
   ControlState,
   NewStandingApproval,
   StandingApproval,
+  N8nStatus,
+  N8nWorkflow,
+  N8nWorkflowInput,
   Routine,
   RoutineInput,
   AgentProfile,
@@ -295,6 +298,26 @@ export class AssistantApi {
     }
     const messages = [...page.messages].sort((a, b) => a.sequence_number - b.sequence_number);
     return { ...page, messages };
+  }
+
+  n8nStatus(): Promise<N8nStatus> {
+    return this.request('GET', '/api/v1/n8n/status');
+  }
+
+  n8nWorkflows(): Promise<{ workflows: N8nWorkflow[] }> {
+    return this.request('GET', '/api/v1/n8n/workflows');
+  }
+
+  createN8nWorkflow(body: N8nWorkflowInput): Promise<N8nWorkflow> {
+    return this.request('POST', '/api/v1/n8n/workflows', body);
+  }
+
+  updateN8nWorkflow(id: string, body: Partial<N8nWorkflowInput>): Promise<N8nWorkflow> {
+    return this.request('PATCH', `/api/v1/n8n/workflows/${encodeURIComponent(id)}`, body);
+  }
+
+  deleteN8nWorkflow(id: string): Promise<unknown> {
+    return this.request('DELETE', `/api/v1/n8n/workflows/${encodeURIComponent(id)}`);
   }
 
   routines(): Promise<{ routines: Routine[] }> {

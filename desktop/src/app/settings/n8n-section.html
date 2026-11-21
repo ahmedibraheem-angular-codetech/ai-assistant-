@@ -1,0 +1,73 @@
+<section class="card" aria-labelledby="s-n8n">
+  <div class="row">
+    <h2 id="s-n8n" class="grow">n8n</h2>
+    <span class="badge" [class.tone-ok]="status()?.ok" [class.tone-warn]="status() && !status()!.ok">
+      {{ status() === null ? 'جارٍ الفحص…' : status()!.ok ? 'متصل' : 'غير متصل' }}
+    </span>
+    <button type="button" (click)="check()">فحص الاتصال</button>
+  </div>
+  @if (status()?.base_url) {
+    <p class="mono small muted" dir="ltr">{{ status()!.base_url }}</p>
+  }
+  @if (status() && status()!.error) {
+    <p class="small muted" dir="auto">{{ status()!.error }}</p>
+  }
+  <p class="muted small">كل تشغيل لسير عمل n8n يطلب موافقتك أولاً. المساعد لا يستطيع تسجيل أو تعديل سير العمل.</p>
+
+  @if (error()) {
+    <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+  }
+
+  @if (editing() !== null) {
+    <div class="form">
+      <h3 class="full">{{ editing() ? 'تعديل سير العمل' : 'سير عمل جديد' }}</h3>
+      @if (formError()) {
+        <p class="banner danger full" role="alert" dir="auto">{{ formError() }}</p>
+      }
+      <label>الاسم
+        <input type="text" maxlength="40" dir="ltr" [value]="name()" (input)="name.set($any($event.target).value)" />
+      </label>
+      <label>الطريقة
+        <select [value]="method()" (change)="method.set($any($event.target).value)">
+          <option value="POST" [selected]="method() === 'POST'">POST</option>
+          <option value="GET" [selected]="method() === 'GET'">GET</option>
+        </select>
+      </label>
+      <label class="full">مسار الـ webhook
+        <input type="text" maxlength="200" dir="ltr" placeholder="my-flow" [value]="path()" (input)="path.set($any($event.target).value)" />
+      </label>
+      <label class="full">الوصف
+        <input type="text" maxlength="300" dir="auto" [value]="description()" (input)="description.set($any($event.target).value)" />
+      </label>
+      <div class="row full">
+        <button type="button" class="primary" (click)="save()" [disabled]="!!busy()">حفظ</button>
+        <button type="button" (click)="cancel()">إلغاء</button>
+      </div>
+    </div>
+  } @else {
+    <div class="row"><button type="button" (click)="openNew()">سير عمل جديد</button></div>
+  }
+
+  @if (workflows().length === 0) {
+    <p class="empty">لا توجد سير عمل مسجلة.</p>
+  } @else {
+    <ul class="list" role="list">
+      @for (w of workflows(); track w.id) {
+        <li class="item" [class.off]="!w.enabled">
+          <div class="grow">
+            <strong dir="ltr" class="mono">{{ w.name }}</strong>
+            <p class="small muted" dir="auto">{{ w.description || 'بدون وصف' }}</p>
+            <p class="small mono muted" dir="ltr">{{ w.method }} /webhook/{{ w.webhook_path }}</p>
+          </div>
+          <div class="row">
+            <button type="button" (click)="toggle(w)" [disabled]="!!busy()">{{ w.enabled ? 'إيقاف' : 'تفعيل' }}</button>
+            <button type="button" (click)="edit(w)" [disabled]="editing() !== null">تعديل</button>
+            <button type="button" class="danger-btn" (click)="remove(w)" [disabled]="!!busy()">
+              {{ confirmDelete() === w.id ? 'تأكيد الحذف' : 'حذف' }}
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>

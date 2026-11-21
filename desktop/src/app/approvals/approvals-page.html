@@ -75,6 +75,14 @@
         </section>
       }
 
+      @if (a.workflow) {
+        <section class="block">
+          <h3>سير عمل n8n</h3>
+          <p dir="auto"><strong>{{ a.workflow.name }}</strong> — {{ a.workflow.description || 'بدون وصف' }}</p>
+          <p class="mono small" dir="ltr">{{ a.workflow.method }} /webhook/{{ a.workflow.webhook_path }}</p>
+        </section>
+      }
+
       @if (a.review.arguments_text) {
         <section class="block">
           <h3>المدخلات المختومة</h3>

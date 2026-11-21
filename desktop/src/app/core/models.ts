@@ -150,6 +150,7 @@ export interface Approval {
   resource_id: string;
   description: string;
   change: ApprovalChange | null;
+  workflow?: { name: string; description: string; method: string; webhook_path: string; enabled: boolean } | null;
   risk: string;
   reason: string;
   mode: string;
@@ -367,6 +368,26 @@ export interface NewStandingApproval {
   tool_name: string;
   path_prefix?: string;
   expires_in_days?: number;
+}
+
+export interface N8nWorkflow {
+  id: string;
+  name: string;
+  description: string;
+  webhook_path: string;
+  method: 'POST' | 'GET';
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type N8nWorkflowInput = Pick<N8nWorkflow, 'name' | 'description' | 'webhook_path' | 'method' | 'enabled'>;
+
+export interface N8nStatus {
+  ok: boolean;
+  base_url: string;
+  status_code?: number;
+  error: string | null;
 }
 
 export interface Routine {
