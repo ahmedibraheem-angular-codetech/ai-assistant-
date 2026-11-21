@@ -412,6 +412,9 @@ stops again when you quit. Logs go to `~/Library/Logs/personal-assistant/`.
 `ASSISTANT_MANAGE_SERVERS=0` turns this off (for an API on another machine
 later); `ASSISTANT_SERVER_DIR` points at the Python project if it moves.
 
+Set `ASSISTANT_API_URL` (for example `https://assistant.example.com`) to point the app at a backend on another host. Off this Mac it must be `https://` (plain `http://` is accepted only for 127.0.0.1, ::1 and localhost), with no credentials, path, query or fragment; an invalid value is ignored with a warning.
+When the URL is not loopback the app starts and manages no servers (the remote host runs its own Ollama and API), and the Bearer token is only ever sent over https.
+
 **Server at login (optional):** a LaunchAgent keeps the API running without
 the app or a terminal, and restarts it if it crashes. The app then never
 starts a second copy. Install `~/Library/LaunchAgents/com.personal-assistant.server.plist`

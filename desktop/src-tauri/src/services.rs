@@ -208,6 +208,10 @@ pub async fn ensure_all(http: reqwest::Client, config: ApiConfig, services: &Ser
     if !managed_from(std::env::var("ASSISTANT_MANAGE_SERVERS").ok().as_deref()) {
         return;
     }
+    // A remote API brings its own Ollama: manage nothing.
+    if !config.is_loopback() {
+        return;
+    }
     // Both start in parallel; the API does not need the model to boot.
     tokio::join!(ensure_ollama(&http), ensure_api(&http, &config, services));
 }

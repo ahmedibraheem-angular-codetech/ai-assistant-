@@ -29,6 +29,8 @@ const ALLOWED_METHODS: [&str; 5] = ["GET", "POST", "PATCH", "PUT", "DELETE"];
 pub struct ApiConfig {
     pub port: u16,
     pub data_dir: PathBuf,
+    /// Validated base URL without a trailing slash (see `resolve_base_url`).
+    pub base_url: String,
 }
 
 impl ApiConfig {
@@ -43,13 +45,92 @@ impl ApiConfig {
         let data_dir = std::env::var_os("ASSISTANT_DATA_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data"));
-        Self { port, data_dir }
+        let raw = std::env::var("ASSISTANT_API_URL").ok();
+        let base_url = match resolve_base_url(raw.as_deref(), port) {
+            Ok(url) => url,
+            Err(reason) => {
+                log::warn!("ignoring ASSISTANT_API_URL: {reason}");
+                default_base_url(port)
+            }
+        };
+        Self { port, data_dir, base_url }
+    }
+
+    /// Loopback config on `port` (the default).
+    pub fn local(port: u16, data_dir: PathBuf) -> Self {
+        Self { port, data_dir, base_url: default_base_url(port) }
     }
 
     pub fn base_url(&self) -> String {
-        // Host is fixed: the bridge never talks to anything but loopback.
-        format!("http://127.0.0.1:{}", self.port)
+        self.base_url.clone()
     }
+
+    /// True when the API lives on this Mac (loopback host).
+    pub fn is_loopback(&self) -> bool {
+        split_url(&self.base_url).map(|(_, host, _)| is_loopback_host(&host)).unwrap_or(false)
+    }
+}
+
+pub fn default_base_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
+
+pub fn is_loopback_host(host: &str) -> bool {
+    matches!(host.to_ascii_lowercase().as_str(), "127.0.0.1" | "::1" | "localhost")
+}
+
+/// Split into (scheme, host without brackets, "host:port" authority). Strict:
+/// no userinfo, query, fragment, whitespace; path empty or "/".
+fn split_url(raw: &str) -> Result<(&'static str, String, String), String> {
+    let raw = raw.trim();
+    let (scheme, rest) = if let Some(r) = raw.get(..7).filter(|p| p.eq_ignore_ascii_case("http://")).map(|_| &raw[7..]) {
+        ("http", r)
+    } else if let Some(r) = raw.get(..8).filter(|p| p.eq_ignore_ascii_case("https://")).map(|_| &raw[8..]) {
+        ("https", r)
+    } else {
+        return Err("must start with http:// or https://".into());
+    };
+    if rest.bytes().any(|b| !b.is_ascii_graphic()) || rest.contains(['@', '?', '#', '\\']) {
+        return Err("must not contain userinfo, query, fragment or spaces".into());
+    }
+    let (authority, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    if path != "" && path != "/" {
+        return Err("must not have a path".into());
+    }
+    let (host, port) = if let Some(inner) = authority.strip_prefix('[') {
+        let (h, after) = inner.split_once(']').ok_or("bad IPv6 host")?;
+        (h, after.strip_prefix(':'))
+    } else {
+        match authority.rsplit_once(':') {
+            Some((h, p)) => (h, Some(p)),
+            None => (authority, None),
+        }
+    };
+    if host.is_empty() || host.contains(['[', ']']) {
+        return Err("missing host".into());
+    }
+    if let Some(p) = port {
+        if p.parse::<u16>().is_err() {
+            return Err("bad port".into());
+        }
+    }
+    Ok((scheme, host.to_ascii_lowercase(), authority.to_ascii_lowercase()))
+}
+
+/// Pure rule check for `ASSISTANT_API_URL`. `None` or blank gives the default.
+/// `http://` is allowed only for loopback hosts; anything else needs `https://`.
+pub fn resolve_base_url(raw: Option<&str>, port: u16) -> Result<String, String> {
+    let Some(raw) = raw.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(default_base_url(port));
+    };
+    let (scheme, host, authority) = split_url(raw)?;
+    if scheme == "http" && !is_loopback_host(&host) {
+        return Err("http:// is only allowed for loopback hosts; use https://".into());
+    }
+    Ok(format!("{scheme}://{authority}"))
 }
 
 /// What the web view gets back. The token is never part of it.
@@ -158,6 +239,10 @@ pub async fn send(
 ) -> Result<ApiResponse, String> {
     let method = check_method(method)?;
     check_path(path)?;
+    // Defence in depth: never put the token on plain http off this Mac.
+    if config.base_url.to_ascii_lowercase().starts_with("http://") && !config.is_loopback() {
+        return Err("Refused: the API address must use https:// unless it is on this Mac.".into());
+    }
     let token = read_token(&config.data_dir)?;
     let mut request = http
         .request(method, format!("{}{}", config.base_url(), path))
@@ -167,10 +252,14 @@ pub async fn send(
     }
     let response = request.send().await.map_err(|error| {
         if error.is_connect() {
-            format!(
-                "The assistant server is not running on port {}. The app starts it on launch; try again in a few seconds.",
-                config.port
-            )
+            if config.is_loopback() {
+                format!(
+                    "The assistant server is not running on port {}. The app starts it on launch; try again in a few seconds.",
+                    config.port
+                )
+            } else {
+                format!("Cannot reach the assistant server at {}.", config.base_url)
+            }
         } else if error.is_timeout() {
             "The assistant took too long to answer.".to_string()
         } else {
@@ -189,4 +278,58 @@ pub async fn send(
 pub async fn health(http: &reqwest::Client, config: &ApiConfig) -> bool {
     let url = format!("{}{}health", config.base_url(), API_PREFIX);
     matches!(http.get(url).timeout(Duration::from_secs(3)).send().await, Ok(r) if r.status().is_success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ok(v: &str) -> String { resolve_base_url(Some(v), 8000).unwrap() }
+    fn bad(v: &str) { assert!(resolve_base_url(Some(v), 8000).is_err(), "{v}"); }
+
+    #[test]
+    fn default_when_unset_or_blank() {
+        assert_eq!(resolve_base_url(None, 9001).unwrap(), "http://127.0.0.1:9001");
+        assert_eq!(resolve_base_url(Some("  "), 8000).unwrap(), "http://127.0.0.1:8000");
+    }
+
+    #[test]
+    fn http_only_for_loopback() {
+        assert_eq!(ok("http://127.0.0.1:8123/"), "http://127.0.0.1:8123");
+        assert_eq!(ok("http://localhost:8000"), "http://localhost:8000");
+        assert_eq!(ok("http://[::1]:8000"), "http://[::1]:8000");
+        bad("http://example.com");
+        bad("http://192.168.1.5:8000");
+        bad("http://localhost.evil.com");
+    }
+
+    #[test]
+    fn https_anywhere() {
+        assert_eq!(ok("https://api.example.com/"), "https://api.example.com");
+        assert_eq!(ok("HTTPS://Api.Example.com:8443"), "https://api.example.com:8443");
+    }
+
+    #[test]
+    fn rejects_userinfo_query_fragment_path_and_junk() {
+        bad("https://user:pw@example.com");
+        bad("https://example.com?x=1");
+        bad("https://example.com/#f");
+        bad("https://example.com/api");
+        bad("https://example.com:99999");
+        bad("https://");
+        bad("ftp://example.com");
+        bad("example.com");
+        bad("https://exa mple.com");
+    }
+
+    #[test]
+    fn is_loopback_follows_url() {
+        let dir: PathBuf = "/tmp".into();
+        assert!(ApiConfig::local(8000, dir.clone()).is_loopback());
+        let mut c = ApiConfig::local(8000, dir.clone());
+        c.base_url = "https://api.example.com".into();
+        assert!(!c.is_loopback());
+        c.base_url = "http://localhost:1".into();
+        assert!(c.is_loopback());
+    }
 }

@@ -115,7 +115,7 @@ fn only_known_methods() {
 
 #[test]
 fn base_url_is_always_loopback() {
-    let config = ApiConfig { port: 8765, data_dir: "/tmp".into() };
+    let config = ApiConfig::local(8765, "/tmp".into());
     assert_eq!(config.base_url(), "http://127.0.0.1:8765");
 }
 
@@ -165,7 +165,7 @@ async fn sends_bearer_token_and_no_origin() {
     let dir = tempfile::tempdir().unwrap();
     write_token(dir.path(), TOKEN, 0o600);
     let (port, server) = serve_once("HTTP/1.1 200 OK", r#"{"answer":"أهلاً"}"#);
-    let config = ApiConfig { port, data_dir: dir.path().into() };
+    let config = ApiConfig::local(port, dir.path().into());
 
     let response = api::send(
         &api::client().unwrap(),
@@ -193,7 +193,7 @@ async fn http_errors_come_back_as_status() {
     let dir = tempfile::tempdir().unwrap();
     write_token(dir.path(), TOKEN, 0o600);
     let (port, server) = serve_once("HTTP/1.1 423 Locked", r#"{"detail":"Paused"}"#);
-    let config = ApiConfig { port, data_dir: dir.path().into() };
+    let config = ApiConfig::local(port, dir.path().into());
     let response = api::send(&api::client().unwrap(), &config, "GET", "/api/v1/conversations", None)
         .await
         .unwrap();
@@ -205,7 +205,7 @@ async fn http_errors_come_back_as_status() {
 #[tokio::test]
 async fn refused_path_never_reads_token_or_connects() {
     let dir = tempfile::tempdir().unwrap(); // no token file on purpose
-    let config = ApiConfig { port: 1, data_dir: dir.path().into() };
+    let config = ApiConfig::local(1, dir.path().into());
     let error = api::send(&api::client().unwrap(), &config, "GET", "/api/v1/../x", None)
         .await
         .unwrap_err();
@@ -217,7 +217,7 @@ async fn server_down_gives_a_clear_message() {
     let dir = tempfile::tempdir().unwrap();
     write_token(dir.path(), TOKEN, 0o600);
     let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port(); // closed again
-    let config = ApiConfig { port, data_dir: dir.path().into() };
+    let config = ApiConfig::local(port, dir.path().into());
     let error = api::send(&api::client().unwrap(), &config, "GET", "/api/v1/conversations", None)
         .await
         .unwrap_err();
