@@ -6,6 +6,7 @@ from app.api.routes import (
     agents,
     approvals,
     analytics,
+    voice,
     recoveries,
     chat,
     control,
@@ -120,3 +121,4 @@ app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"
 app.include_router(graph.router, prefix=settings.api_prefix, tags=["Knowledge graph"])
 app.include_router(learning.router, prefix=settings.api_prefix, tags=["Learning"])
 app.include_router(analytics.router, prefix=settings.api_prefix, tags=["Analytics"])
+app.include_router(voice.router, prefix=settings.api_prefix, tags=["Voice"])

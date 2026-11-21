@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     # Default daily limits per agent. Empty means unlimited; per-agent budgets override.
     agent_daily_tool_calls: int | None = Field(default=None, ge=1, le=100_000)
     agent_daily_chat_turns: int | None = Field(default=None, ge=1, le=100_000)
+    # Voice (phase 6), all on this Mac: whisper.cpp for speech to text, macOS `say` for replies.
+    voice_whisper_cli: str = "/opt/homebrew/bin/whisper-cli"
+    voice_whisper_model: str = ""  # path to a ggml-*.bin model; empty = speech input off
+    voice_language: str = Field(default="ar", pattern=r"^(auto|[a-z]{2})$")
+    voice_tts_voice: str = Field(default="Majed", max_length=64)
+    voice_max_audio_bytes: int = Field(default=8_000_000, ge=10_000, le=50_000_000)
+    voice_max_tts_chars: int = Field(default=4_000, ge=100, le=20_000)
+    voice_timeout_seconds: int = Field(default=120, ge=5, le=600)
     # Code sandbox (run_code). Off by default. Each run needs approval.
     sandbox_enabled: bool = False
     sandbox_docker_path: str = "docker"
