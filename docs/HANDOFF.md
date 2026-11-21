@@ -57,7 +57,7 @@ budgets, standing approvals, hiring). Talks to the local API with the Bearer
 token (read the token file through a Tauri command; never ship it in the web
 bundle). Rust/cargo is installed. Needs npm downloads.
 
-Phase 5 is done. Open items: Developer ID signing + notarization if the app is shared; the app does not start the Python server itself yet (a later hardening item).
+Phase 5 is done. The app now starts Ollama and the API when they are down (`desktop/src-tauri/src/services.rs`; it prefers the `com.personal-assistant.server` LaunchAgent, installed on this Mac, through `launchctl kickstart`). Release builds must pass `npm run check:csp` (inline critical CSS and Tauri style nonces left the app unstyled). Plan from the user: everything stays local for now; later the backend moves to a host, so `ApiConfig` will need a configurable base URL (today loopback only) and `ASSISTANT_MANAGE_SERVERS=0` for that case. Open items: Developer ID signing + notarization if the app is shared; `npm run dist` sometimes fails at the dmg step ("Resource busy"), rerun `npx tauri bundle --bundles dmg`.
 Later: 6 voice + mobile, 7 automation (n8n, browser, proactive tasks),
 8 optional LoRA fine-tuning, 9 hardening.
 

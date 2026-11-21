@@ -168,8 +168,8 @@ pub async fn send(
     let response = request.send().await.map_err(|error| {
         if error.is_connect() {
             format!(
-                "The assistant server is not running on port {}. Start it with: .venv/bin/python -m app --port {}",
-                config.port, config.port
+                "The assistant server is not running on port {}. The app starts it on launch; try again in a few seconds.",
+                config.port
             )
         } else if error.is_timeout() {
             "The assistant took too long to answer.".to_string()

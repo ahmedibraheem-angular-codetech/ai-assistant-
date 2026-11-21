@@ -1,8 +1,10 @@
 pub mod api;
 pub mod desktop;
+pub mod services;
 
 use api::{ApiConfig, ApiResponse};
 use serde_json::Value;
+use tauri::Manager;
 
 pub struct Bridge {
     pub config: ApiConfig,
@@ -39,8 +41,10 @@ pub fn run() {
         config: ApiConfig::from_env(),
         http: api::client().expect("HTTP client"),
     };
-    tauri::Builder::default()
+    let starter = (bridge.http.clone(), bridge.config.clone());
+    let app = tauri::Builder::default()
         .manage(bridge)
+        .manage(services::Services::default())
         .invoke_handler(tauri::generate_handler![api_request, api_health, desktop::hide_quick, desktop::open_main])
         .setup(|app| {
             // Logging first, so warnings from the desktop setup are not lost.
@@ -52,9 +56,22 @@ pub fn run() {
                 )?;
             }
             desktop::setup(app)?;
+            // Start Ollama and the assistant server if they are not running.
+            let handle = app.handle().clone();
+            let (http, config) = starter;
+            tauri::async_runtime::spawn(async move {
+                let services = handle.state::<services::Services>();
+                services::ensure_all(http, config, &services).await;
+            });
             log::info!("desktop ready: quick window, Menu Bar icon, shortcut");
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building the Tauri application");
+    app.run(|handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            // Stop the server only if this app started it (not the login item).
+            handle.state::<services::Services>().stop();
+        }
+    });
 }

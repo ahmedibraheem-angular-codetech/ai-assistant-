@@ -391,8 +391,40 @@ runs on the Mac that built it. Giving it to someone else needs an Apple
 Developer ID certificate and notarization (set `signingIdentity` and the
 `APPLE_*` variables). The built app talks to the server on port **8000**
 and reads the token from this repository's `data/` folder (the path is fixed
-at build time), so start the server with `.venv/bin/python -m app` first.
-Turn on "launch at login" from the Menu Bar of the built app, not the dev one.
+at build time). Turn on "launch at login" from the Menu Bar of the built
+app, not the dev one.
+
+**The app starts the servers it needs** (`desktop/src-tauri/src/services.rs`).
+On launch it checks Ollama (`127.0.0.1:11434`) and the assistant API, and
+starts whichever is down: `ollama serve` (left running on quit, other tools
+may share it), and for the API either the login item below, through
+`launchctl kickstart`, or `.venv/bin/python -m app --port 8000`, which it
+stops again when you quit. Logs go to `~/Library/Logs/personal-assistant/`.
+`ASSISTANT_MANAGE_SERVERS=0` turns this off (for an API on another machine
+later); `ASSISTANT_SERVER_DIR` points at the Python project if it moves.
+
+**Server at login (optional):** a LaunchAgent keeps the API running without
+the app or a terminal, and restarts it if it crashes. The app then never
+starts a second copy. Install `~/Library/LaunchAgents/com.personal-assistant.server.plist`
+(program `.venv/bin/python -m app --port 8000`, working directory this repo,
+`RunAtLoad`, `KeepAlive` on crash), then:
+
+```bash
+U=gui/$(id -u); L=com.personal-assistant.server
+launchctl bootstrap $U ~/Library/LaunchAgents/$L.plist   # load and start
+launchctl kickstart -k $U/$L                              # restart after code changes
+launchctl bootout $U/$L                                   # stop until next login
+tail -f ~/Library/Logs/personal-assistant/server.log
+```
+
+While it runs, a manual `python -m app` on the same port refuses to start
+(one server at a time); stop the login item first.
+
+**Styles and the CSP:** the production CSP has `script-src 'self'`, so the
+build must not inline critical CSS (it loads `styles.css` with an `onload`
+handler), and Tauri must not add nonces to `style-src` (a nonce makes WebKit
+ignore `'unsafe-inline'`, and Angular injects component styles as `<style>`
+tags). `npm run check:csp` checks both and runs before every `tauri build`.
 
 **Adding a front-end package:** the window runs with `freezePrototype: true`
 (Object.prototype is read-only, a defence against prototype pollution). A
