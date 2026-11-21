@@ -2,6 +2,7 @@ import { Injectable, computed, signal } from '@angular/core';
 
 /** Every widget the home page can show. Add one here and in the dashboard template. */
 export const WIDGETS = [
+  { id: 'insights', name: 'تنبيهات', hint: 'أشياء تحتاجك الآن', span: 12 },
   { id: 'kpis', name: 'المؤشرات', hint: 'كروت الأرقام بالحلقات', span: 12 },
   { id: 'map', name: 'خريطة المساعد', hint: 'الوكلاء والأنظمة حول المساعد', span: 8 },
   { id: 'queue', name: 'آخر الإجراءات', hint: 'طلبات الموافقة وحالتها', span: 4 },

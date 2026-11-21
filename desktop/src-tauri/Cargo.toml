@@ -25,6 +25,7 @@ tauri-plugin-log = "2"
 # so the web view needs no extra JavaScript packages or permissions.
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
 libc = "0.2"
 # Already in the tree through tauri; used for sleep and join in services.rs.
 tokio = { version = "1", features = ["time", "macros"] }

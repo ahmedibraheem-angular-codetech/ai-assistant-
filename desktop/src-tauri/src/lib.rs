@@ -1,5 +1,6 @@
 pub mod api;
 pub mod desktop;
+pub mod notify;
 pub mod services;
 
 use api::{ApiConfig, ApiResponse};
@@ -42,7 +43,9 @@ pub fn run() {
         http: api::client().expect("HTTP client"),
     };
     let starter = (bridge.http.clone(), bridge.config.clone());
+    let notifier = starter.clone();
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .manage(bridge)
         .manage(services::Services::default())
         .invoke_handler(tauri::generate_handler![api_request, api_health, desktop::hide_quick, desktop::open_main])
@@ -63,6 +66,8 @@ pub fn run() {
                 let services = handle.state::<services::Services>();
                 services::ensure_all(http, config, &services).await;
             });
+            let (http, config) = notifier;
+            tauri::async_runtime::spawn(notify::run(app.handle().clone(), http, config));
             log::info!("desktop ready: quick window, Menu Bar icon, shortcut");
             Ok(())
         })

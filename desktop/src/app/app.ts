@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { ApprovalsStore } from './core/approvals-store';
+import { InsightsStore } from './core/insights';
 import { WINDOW_LABEL } from './core/desktop';
 import { QuickPage } from './quick/quick-page';
 import { ThemeService } from './core/theme';
@@ -23,11 +24,13 @@ interface NavItem {
 export class App {
   readonly theme = inject(ThemeService);
   readonly approvals = inject(ApprovalsStore);
+  readonly insights = inject(InsightsStore);
   /** The ⌥ Space window shows only the quick page, without the side menu. */
   readonly quick = inject(WINDOW_LABEL) === 'quick';
 
   constructor() {
     this.approvals.start();
+    this.insights.start();
   }
 
   readonly nav: NavItem[] = [

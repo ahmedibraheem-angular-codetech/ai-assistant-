@@ -298,6 +298,17 @@ of its time; missed days are never backfilled. `last_status` is `ok`, `error`
 or `refused` (paused or over budget). Turn the scheduler off with
 `ROUTINE_SCHEDULER_ENABLED=false`.
 
+### Proactive insights
+
+`GET /api/v1/insights` (admin only) lists things that need you, computed from
+local data with no model call: approvals pending over 1 hour, routines whose
+last run was `error`/`refused`, agents at 80% or more of a daily budget,
+lessons and skills waiting for review, the assistant paused over 2 hours, and
+Ollama unreachable (2 s ping, cached 60 s). Each insight has a stable `id`,
+`kind`, `severity` (`info`/`warn`/`high`), Arabic `title`/`detail` and an app
+`link`. Each rule is isolated, so one failing rule never hides the others.
+No schema change. Logic: `app/insights.py`.
+
 ### n8n workflows
 
 The assistant can trigger n8n workflows you register, and every run asks for your approval first.
@@ -359,6 +370,12 @@ and a pause/resume button. It refreshes every 30 seconds. **Customize**
 (`/customize`) chooses which widgets show, their order, density and motion;
 it is saved at once in the app's local storage on this computer and read
 defensively (unknown widgets dropped, new ones appended).
+**Insights**: a "تنبيهات" widget (first by default) lists `/api/v1/insights`
+with severity colors and links; each can be dismissed (stored with a hash of
+its detail in `assistant.insights.dismissed.v1`, so a changed detail shows
+again). The الرئيسية menu item shows a badge for undismissed warn/high items
+(polled every 60 s), and the Rust side polls every 5 minutes and sends a
+macOS notification for each new high-severity insight (`tauri-plugin-notification`).
 
 **Voice.** The chat page and the quick window (⌥ Space) have a mic button:
 press to record, press again to stop (it also stops by itself after 60

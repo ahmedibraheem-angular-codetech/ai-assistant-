@@ -23,15 +23,15 @@ describe('layout', () => {
     const first = TestBed.inject(LayoutService);
     first.toggle('queue');
     first.move('tools', -1);
-    first.move('kpis', -1); // already first: nothing happens
+    first.move('insights', -1); // already first: nothing happens
     first.setDensity('compact');
-    expect(first.visible().map((w) => w.id)).toEqual(['kpis', 'map', 'tools', 'trend', 'learning']);
+    expect(first.visible().map((w) => w.id)).toEqual(['insights', 'kpis', 'map', 'tools', 'trend', 'learning']);
 
     TestBed.resetTestingModule();
     const again = TestBed.inject(LayoutService);
     expect(again.layout().hidden).toEqual(['queue']);
     expect(again.layout().density).toBe('compact');
-    expect(again.visible()[2].id).toBe('tools');
+    expect(again.visible()[3].id).toBe('tools');
 
     again.reset();
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(defaultLayout());

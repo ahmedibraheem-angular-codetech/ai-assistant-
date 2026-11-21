@@ -17,9 +17,9 @@ describe('CustomizePage', () => {
 
   it('lists every widget with a switch and shows the count', () => {
     const { el } = setup();
-    expect(el.querySelectorAll('.row:not(.plain)')).toHaveLength(6);
-    expect(el.querySelector('.card-head')?.textContent).toContain('6 من 6');
-    expect(el.querySelectorAll('.preview .tile')).toHaveLength(6);
+    expect(el.querySelectorAll('.row:not(.plain)')).toHaveLength(7);
+    expect(el.querySelector('.card-head')?.textContent).toContain('7 من 7');
+    expect(el.querySelectorAll('.preview .tile')).toHaveLength(7);
   });
 
   it('switching a widget off hides it from the preview and the home page layout', () => {
@@ -27,8 +27,8 @@ describe('CustomizePage', () => {
     el.querySelector<HTMLInputElement>('#w-queue')?.click();
     fixture.detectChanges();
     expect(layout.isVisible('queue')).toBe(false);
-    expect(el.querySelectorAll('.preview .tile')).toHaveLength(5);
-    expect(el.querySelector('.card-head')?.textContent).toContain('5 من 6');
+    expect(el.querySelectorAll('.preview .tile')).toHaveLength(6);
+    expect(el.querySelector('.card-head')?.textContent).toContain('6 من 7');
   });
 
   it('moves a widget up, and the first one cannot move up', () => {
@@ -37,7 +37,7 @@ describe('CustomizePage', () => {
     expect(up[0].disabled).toBe(true); // first row's up button
     el.querySelector<HTMLButtonElement>('[aria-label="حرّك خريطة المساعد لأعلى"]')?.click();
     fixture.detectChanges();
-    expect(layout.layout().order.slice(0, 2)).toEqual(['map', 'kpis']);
+    expect(layout.layout().order.slice(0, 3)).toEqual(['insights', 'map', 'kpis']);
   });
 
   it('density and motion apply at once; reset restores everything', () => {
@@ -49,6 +49,6 @@ describe('CustomizePage', () => {
     expect(layout.layout().motion).toBe(false);
     expect(el.querySelector('.preview')?.classList).toContain('compact');
     el.querySelector<HTMLButtonElement>('.top button')?.click();
-    expect(layout.layout()).toEqual({ order: ['kpis', 'map', 'queue', 'trend', 'tools', 'learning'], hidden: [], density: 'comfy', motion: true });
+    expect(layout.layout()).toEqual({ order: ['insights', 'kpis', 'map', 'queue', 'trend', 'tools', 'learning'], hidden: [], density: 'comfy', motion: true });
   });
 });

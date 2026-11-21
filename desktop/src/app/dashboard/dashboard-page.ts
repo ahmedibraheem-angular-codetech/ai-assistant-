@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
 import { AssistantApi } from '../core/api';
+import { InsightsStore } from '../core/insights';
 import { LayoutService } from '../core/layout';
 import { AnalyticsRange, AnalyticsSummary } from '../core/models';
 import { LineChart } from '../shared/line-chart';
@@ -29,6 +30,7 @@ const RING = 2 * Math.PI * 26;
 export class DashboardPage {
   private readonly api = inject(AssistantApi);
   readonly layout = inject(LayoutService);
+  readonly insights = inject(InsightsStore);
 
   readonly ranges = RANGES;
   readonly range = signal<AnalyticsRange>('7d');
@@ -70,6 +72,7 @@ export class DashboardPage {
   });
 
   constructor() {
+    this.insights.start();
     void this.load();
     const timer = setInterval(() => void this.load(true), REFRESH_MS);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));

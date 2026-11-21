@@ -18,6 +18,9 @@
           <path [attr.d]="item.icon"></path>
         </svg>
         {{ item.label }}
+        @if (item.path === '/' && insights.urgent()) {
+          <span class="badge" [attr.aria-label]="insights.urgent() + ' تنبيه'">{{ insights.urgent() }}</span>
+        }
         @if (item.path === '/approvals' && approvals.pending().length) {
           <span class="badge" [attr.aria-label]="approvals.pending().length + ' بانتظارك'">{{ approvals.pending().length }}</span>
         }

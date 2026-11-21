@@ -34,7 +34,7 @@ describe('DashboardPage', () => {
     const { fixture, el, requests } = setup(() => ({ status: 200, body: summary() }));
     await settle(fixture);
 
-    expect(requests[0]).toBe('GET /api/v1/analytics/summary?range=7d');
+    expect(requests).toContain('GET /api/v1/analytics/summary?range=7d');
     expect(el.querySelectorAll('.kpi')).toHaveLength(6);
     expect(el.querySelector('.kpi .big')?.textContent).toContain('12');
     expect(el.querySelectorAll('.node')).toHaveLength(7);
@@ -110,14 +110,31 @@ describe('DashboardPage', () => {
     await settle(fixture);
     expect(el.querySelector('.kpi')).toBeNull();
     const order = [...el.querySelectorAll('.widget')].map((w) => w.getAttribute('data-widget'));
-    expect(order).toEqual(['map', 'tools', 'queue', 'trend', 'learning']);
+    expect(order).toEqual(['insights', 'map', 'tools', 'queue', 'trend', 'learning']);
   });
 
   it('says so when every widget is hidden, with a link to customize', async () => {
     const { fixture, el } = setup(() => ({ status: 200, body: summary() }));
     const layout = TestBed.inject(LayoutService);
-    for (const id of ['kpis', 'map', 'queue', 'trend', 'tools', 'learning'] as const) layout.toggle(id);
+    for (const id of ['insights', 'kpis', 'map', 'queue', 'trend', 'tools', 'learning'] as const) layout.toggle(id);
     await settle(fixture);
     expect(el.querySelector('.empty-all')?.textContent).toContain('كل الأقسام مخفية');
+  });
+
+  it('lists insights with severity and link, and dismissing one hides it', async () => {
+    const insights = [
+      { id: 'a', kind: 'approvals', severity: 'warn', title: 'طلبات', detail: '2 طلب', link: '/approvals' },
+      { id: 'b', kind: 'model', severity: 'high', title: 'Ollama', detail: 'غير متاح', link: '/settings' },
+    ];
+    const { fixture, el } = setup((_m, path) => ({
+      status: 200, body: path.endsWith('/insights') ? { insights: structuredClone(insights), count: 2 } : summary(),
+    }));
+    await settle(fixture);
+    expect(el.querySelectorAll('.insights .row')).toHaveLength(2);
+    expect(el.querySelector('.insights .row.tone-danger')?.textContent).toContain('Ollama');
+    expect(el.querySelector('.insights a')?.getAttribute('href')).toBe('/approvals');
+    el.querySelector<HTMLButtonElement>('.insights .dismiss')?.click();
+    await settle(fixture);
+    expect(el.querySelectorAll('.insights .row')).toHaveLength(1);
   });
 });

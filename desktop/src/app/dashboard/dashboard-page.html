@@ -97,6 +97,23 @@
               }
             </article>
           }
+          @case ('insights') {
+            <article class="card insights" aria-labelledby="i-h">
+              <div class="card-head"><h2 id="i-h">تنبيهات</h2></div>
+              @for (i of insights.visible(); track i.id) {
+                <div class="row" [class]="'row tone-' + (i.severity === 'high' ? 'danger' : i.severity === 'warn' ? 'warn' : 'accent')">
+                  <i class="dot" aria-hidden="true"></i>
+                  <a class="row-text" [routerLink]="i.link">
+                    <span class="ellipsis" dir="auto">{{ i.title }}</span>
+                    <span class="small muted ellipsis" dir="auto">{{ i.detail }}</span>
+                  </a>
+                  <button type="button" class="dismiss" (click)="insights.dismiss(i)" [attr.aria-label]="'إخفاء ' + i.title">إخفاء</button>
+                </div>
+              } @empty {
+                <p class="empty small muted">لا شيء يحتاجك الآن.</p>
+              }
+            </article>
+          }
           @case ('queue') {
             <article class="card queue" aria-labelledby="q-h">
               <div class="card-head"><h2 id="q-h">آخر الإجراءات</h2><a routerLink="/approvals" class="small">افتح الموافقات</a></div>
