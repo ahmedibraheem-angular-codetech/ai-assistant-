@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 
 from app.core.config import get_settings
@@ -80,12 +82,41 @@ class OllamaProvider:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/api/chat",
-                    json={"model": model, "messages": messages, "stream": False},
+                request = asyncio.ensure_future(
+                    client.post(
+                        f"{self.base_url}/api/chat",
+                        json={"model": model, "messages": messages, "stream": False},
+                    )
                 )
+                response = await _unless_paused(request)
                 response.raise_for_status()
                 payload = response.json()
             return payload["message"]["content"]
         except (httpx.HTTPError, KeyError, ValueError) as exc:
             raise OllamaError(f"Ollama chat request failed: {exc}") from exc
+
+
+PAUSE_POLL_SECONDS = 0.25
+
+
+async def _unless_paused(request: "asyncio.Future"):
+    """Wait for the model request, but cancel it as soon as the assistant is paused.
+
+    Cancelling closes the HTTP connection, and Ollama stops generating when its
+    client goes away, so a pause frees the model at once. The caller's turn then
+    fails with the paused message and undoes what it saved early.
+    """
+    from app.core import controls
+
+    try:
+        while True:
+            done, _ = await asyncio.wait({request}, timeout=PAUSE_POLL_SECONDS)
+            if done:
+                return request.result()
+            if controls.is_paused():
+                request.cancel()
+                await asyncio.gather(request, return_exceptions=True)
+                raise controls.AssistantBlockedError(controls.PAUSED_MESSAGE)
+    except asyncio.CancelledError:
+        request.cancel()
+        raise

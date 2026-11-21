@@ -119,8 +119,9 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json
   http://127.0.0.1:8000/api/v1/control/agents/<agent>/budget -d '{"daily_tool_calls":200,"daily_chat_turns":100}'
 ```
 
-While paused, no tool starts, no model call is made, and running file workers
-are killed. The pause survives restarts. Budgets are daily (UTC) per agent;
+While paused, no tool starts, no model call is made, a model reply already
+running is cancelled within a quarter second (the turn fails with HTTP 423 and
+nothing from it is saved), and running file workers are killed. The pause survives restarts. Budgets are daily (UTC) per agent;
 `AGENT_DAILY_TOOL_CALLS` / `AGENT_DAILY_CHAT_TURNS` set a default for all
 agents. Usage counters reset when the server restarts.
 
