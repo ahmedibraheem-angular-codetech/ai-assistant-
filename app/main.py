@@ -17,6 +17,7 @@ from app.api.routes import (
     memories,
     permissions,
     projects,
+    routines,
     tools,
     workspaces,
 )
@@ -50,15 +51,23 @@ async def lifespan(_app: FastAPI):
                 from app.learning.study import scheduler_loop
 
                 scheduler = asyncio.create_task(scheduler_loop())
+            routines_task = None
+            if get_settings().routine_scheduler_enabled:
+                import asyncio
+
+                from app.routines import scheduler_loop as routine_loop
+
+                routines_task = asyncio.create_task(routine_loop())
             try:
                 yield
             finally:
-                if scheduler is not None:
-                    scheduler.cancel()
-                    try:
-                        await scheduler
-                    except BaseException:
-                        pass
+                for task in (scheduler, routines_task):
+                    if task is not None:
+                        task.cancel()
+                        try:
+                            await task
+                        except BaseException:
+                            pass
     finally:
         _app.state.auth_token = None
         lease.release()
@@ -119,6 +128,7 @@ app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recover
 app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])
 app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"])
 app.include_router(graph.router, prefix=settings.api_prefix, tags=["Knowledge graph"])
+app.include_router(routines.router, prefix=settings.api_prefix, tags=["Routines"])
 app.include_router(learning.router, prefix=settings.api_prefix, tags=["Learning"])
 app.include_router(analytics.router, prefix=settings.api_prefix, tags=["Analytics"])
 app.include_router(voice.router, prefix=settings.api_prefix, tags=["Voice"])

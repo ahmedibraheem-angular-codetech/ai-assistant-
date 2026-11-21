@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     sandbox_shell_image: str = "alpine:3.20"
     # Background study scheduler for agents with a study plan.
     study_scheduler_enabled: bool = True
+    # Scheduled routines (phase 7): time zone for "HH:MM", catch-up window after a sleep.
+    routine_scheduler_enabled: bool = True
+    routine_timezone: str = "Africa/Cairo"
+    routine_catchup_hours: float = Field(default=6, ge=0, le=24)
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

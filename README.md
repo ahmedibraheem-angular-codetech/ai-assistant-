@@ -277,6 +277,27 @@ standing approval for `research`, the session leaves an approval request
 instead. Pause and budgets apply. Turn the scheduler off with
 `STUDY_SCHEDULER_ENABLED=false`.
 
+### Scheduled routines
+
+A routine is a saved prompt that runs as a normal chat turn at a time of day
+(for example a morning brief). Only you create them (local admin routes; agents
+have no tool for this). Each run opens a conversation titled `⏰ <name>`; pause,
+budgets and approvals apply as in any chat.
+
+```bash
+curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  http://127.0.0.1:8000/api/v1/routines -d '{"name":"ملخص الصبح","prompt":"...","time_of_day":"08:00","days":[0,1,2,3,4]}'
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/routines
+curl -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/api/v1/routines/<id>/run   # run now
+```
+
+`days` are 0-6 (Monday = 0); empty means every day. The scheduler polls every
+30 s in `ROUTINE_TIMEZONE` (default `Africa/Cairo`). If the Mac was asleep, a
+routine runs once on wake but only within `ROUTINE_CATCHUP_HOURS` (default 6)
+of its time; missed days are never backfilled. `last_status` is `ok`, `error`
+or `refused` (paused or over budget). Turn the scheduler off with
+`ROUTINE_SCHEDULER_ENABLED=false`.
+
 ## Analytics (dashboard data)
 
 One read-only call returns everything the Mac app's home page shows:

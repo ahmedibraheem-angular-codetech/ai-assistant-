@@ -473,7 +473,7 @@ def test_version_7_workspace_grant_survives_the_permission_migration(tmp_path, m
             versions = connection.execute("SELECT version FROM schema_version ORDER BY version").fetchall()
             grants = connection.execute("SELECT COUNT(*) FROM agent_workspace_grants").fetchone()[0]
             mode = connection.execute("SELECT mode FROM permission_policy").fetchone()[0]
-        assert versions == [(7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,)]
+        assert versions == [(7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,), (26,)]
         assert grants == 1
         assert mode == "ask_sensitive"
     finally:
