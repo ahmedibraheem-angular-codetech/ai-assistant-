@@ -10,11 +10,11 @@ assistant's own project memory (`GET /api/v1/projects/personal%20assistant/brief
 | Repo (on the Mac) | `/Users/a.m.ibraheem/Desktop/local-mac-ai-assistant/personal-ai-assistant` |
 | GitHub | `ahmedibraheem-angular-codetech/ai-assistant-`, branch `wp02-spawn-unreaped-remediation` (all pushed) |
 | Python | `.venv/bin/python` (3.15, macOS venv — use the Mac shell via Desktop Commander, not a Linux VM) |
-| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **555 passed, 12 skipped** |
+| Tests | `.venv/bin/python -m pytest -q -p no:cacheprovider -W ignore::DeprecationWarning` → **576 passed, 12 skipped** |
 | Live Docker tests | `RUN_DOCKER_TESTS=1 ... tests/test_sandbox.py` |
 | Run server | `.venv/bin/python -m app --port 8000` (token: `.venv/bin/python -m app.control_plane token`) |
-| DB | `data/assistant.db`, **schema 25**; backups `data/assistant.db.backup-before-vNN` |
-| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **95 passed**; `cd src-tauri && cargo test` → **16 passed**; `npm run check:freeze` after adding a package |
+| DB | `data/assistant.db`, **schema 26**; backups `data/assistant.db.backup-before-vNN` |
+| Mac app | `desktop/` (Angular 21 + Tauri 2). `CI=1 npx ng test --watch=false` → **127 passed**; `cd src-tauri && cargo test` → **26 passed**; `npm run check:freeze` after adding a package |
 | Run app | server first, then `cd desktop && ASSISTANT_API_PORT=8765 npx tauri dev` (dev server pinned to 127.0.0.1:4200) |
 | Old design/review docs | `~/.cursor/projects/Users-a-m-ibraheem-Desktop-local-mac-ai-assistant-personal-ai-assistant/agent-tools/` |
 
@@ -40,6 +40,7 @@ Done (each slice committed and pushed):
 - **Slice 7** desktop shell: ⌥ Space quick window, Menu Bar menu (open, quick, approvals, pause/resume, launch at login, quit), close hides. All in Rust (`desktop.rs`); the tray icon is declared in `tauri.conf.json` because `tauri dev` rewrites Cargo features from the config.
 - **Slice 8** packaging: `npm run dist` → `Personal Assistant.app` + `.dmg`, ad-hoc signed (no Developer ID on this Mac), hardened runtime. The built app uses port 8000 and the repo's `data/` (path fixed at build time).
 - **Fix** concurrent chat turns returned 500 (SQLite single writer while a turn holds its transaction): one chat turn at a time per server.
+- **Phase 7 slice 1 (done)** scheduled routines: schema 26 `routines`, `app/routines.py` (pure `next_due`/`is_due`, 30 s scheduler, catch-up once within `ROUTINE_CATCHUP_HOURS`, tz `ROUTINE_TIMEZONE`), admin-only `/api/v1/routines` (+`/run`), Mac page `/routines`. Runs go through `ConversationService.send` (pause, budgets, approvals unchanged); agents cannot create routines. Initial bundle budget warning raised to 520 kB; the routines page is lazy-loaded.
 - **Schema 25** `tool_runs` log (every started run; written in the bound session during a turn); analytics read it.
 
 Lessons from this phase (keep):

@@ -1,0 +1,86 @@
+<header class="top">
+  <div class="row">
+    <h1 class="grow">المهام المجدولة</h1>
+    <button type="button" class="primary" (click)="openNew()" [disabled]="editing() !== null">مهمة جديدة</button>
+  </div>
+  <p class="muted">طلبات تعمل تلقائياً في وقت محدد، وتظهر نتيجتها كمحادثة. الموافقات والإيقاف المؤقت يسري عليها كالمعتاد.</p>
+</header>
+
+@if (error()) {
+  <p class="banner danger" role="alert" dir="auto">{{ error() }}</p>
+}
+
+@if (editing() !== null) {
+  <section class="card" aria-labelledby="r-form">
+    <div class="row">
+      <h2 id="r-form" class="grow">{{ editing() ? 'تعديل المهمة' : 'مهمة جديدة' }}</h2>
+      <button type="button" (click)="preset()">ملخص الصبح</button>
+    </div>
+    @if (formError()) {
+      <p class="banner danger" role="alert" dir="auto">{{ formError() }}</p>
+    }
+    <div class="form">
+      <label>الاسم
+        <input type="text" maxlength="80" [value]="name()" (input)="name.set($any($event.target).value)" />
+      </label>
+      <label>الوكيل
+        <select [value]="agentId()" (change)="agentId.set($any($event.target).value)">
+          <option value="" [selected]="!agentId()">المساعد الافتراضي</option>
+          @for (a of agents(); track a.id) {
+            <option [value]="a.id" [selected]="agentId() === a.id">{{ a.name }}</option>
+          }
+        </select>
+      </label>
+      <label>الوقت
+        <input type="time" [value]="time()" (input)="time.set($any($event.target).value)" />
+      </label>
+      <label class="full">الطلب
+        <textarea rows="5" maxlength="4000" dir="auto" [value]="prompt()" (input)="prompt.set($any($event.target).value)"></textarea>
+      </label>
+    </div>
+    <div class="chips" role="group" aria-label="الأيام (بدون اختيار = كل يوم)">
+      @for (c of chips; track c.value) {
+        <button type="button" class="chip" [class.on]="days().includes(c.value)" [attr.aria-pressed]="days().includes(c.value)" (click)="toggleDay(c.value)">{{ c.label }}</button>
+      }
+    </div>
+    <div class="row">
+      <button type="button" class="primary" (click)="save()" [disabled]="!!busy()">حفظ</button>
+      <button type="button" (click)="cancel()">إلغاء</button>
+    </div>
+  </section>
+}
+
+<section class="card" aria-label="قائمة المهام">
+  @if (loading()) {
+    <p class="muted" role="status">جارٍ التحميل…</p>
+  } @else if (!routines().length) {
+    <p class="empty">لا توجد مهام مجدولة بعد. جرّب «مهمة جديدة» ثم «ملخص الصبح».</p>
+  }
+  @for (r of routines(); track r.id) {
+    <article class="item" [class.off]="!r.enabled">
+      <div class="row">
+        <strong class="grow" dir="auto">{{ r.name }}</strong>
+        <label class="switch">
+          <input type="checkbox" [checked]="r.enabled" [disabled]="!!busy()" (change)="toggle(r)" [attr.aria-label]="'تفعيل ' + r.name" />
+          {{ r.enabled ? 'مفعّلة' : 'متوقفة' }}
+        </label>
+      </div>
+      <p class="muted small">{{ r.time_of_day }} · {{ daysText(r.days) }} · {{ agentName(r.agent_id) }}</p>
+      <p class="small">
+        آخر تشغيل:
+        <span class="badge" [class]="'badge tone-' + statusTone(r.last_status)" dir="auto">{{ statusText(r) }}</span>
+        @if (r.last_conversation_id) {
+          <a [routerLink]="['/chat', r.last_conversation_id]">فتح المحادثة</a>
+        }
+      </p>
+      <div class="row">
+        <button type="button" (click)="run(r)" [disabled]="!!busy()">{{ busy() === r.id ? 'جارٍ التشغيل…' : 'شغّل الآن' }}</button>
+        <button type="button" (click)="edit(r)" [disabled]="!!busy()">تعديل</button>
+        <button type="button" class="danger-btn" (click)="remove(r)" [disabled]="!!busy()">{{ confirmDelete() === r.id ? 'تأكيد الحذف' : 'حذف' }}</button>
+        @if (confirmDelete() === r.id) {
+          <button type="button" (click)="confirmDelete.set(null)">تراجع</button>
+        }
+      </div>
+    </article>
+  }
+</section>

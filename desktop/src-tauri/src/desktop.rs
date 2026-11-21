@@ -15,8 +15,8 @@ pub const MAIN: &str = "main";
 pub const QUICK: &str = "quick";
 
 /// Pages the quick window may open in the main window. Anything else is refused.
-pub const ROUTES: [&str; 8] = [
-    "/", "/chat", "/approvals", "/team", "/projects", "/knowledge", "/customize", "/settings",
+pub const ROUTES: [&str; 9] = [
+    "/", "/chat", "/approvals", "/team", "/projects", "/knowledge", "/customize", "/routines", "/settings",
 ];
 
 /// `/chat/<uuid>` is allowed too, so "open this conversation" works.

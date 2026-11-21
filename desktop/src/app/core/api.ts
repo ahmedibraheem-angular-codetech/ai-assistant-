@@ -8,6 +8,8 @@ import {
   ControlState,
   NewStandingApproval,
   StandingApproval,
+  Routine,
+  RoutineInput,
   AgentProfile,
   AgentTemplate,
   AnalyticsRange,
@@ -293,5 +295,25 @@ export class AssistantApi {
     }
     const messages = [...page.messages].sort((a, b) => a.sequence_number - b.sequence_number);
     return { ...page, messages };
+  }
+
+  routines(): Promise<{ routines: Routine[] }> {
+    return this.request('GET', '/api/v1/routines');
+  }
+
+  createRoutine(body: RoutineInput): Promise<Routine> {
+    return this.request('POST', '/api/v1/routines', body);
+  }
+
+  updateRoutine(id: string, body: Partial<RoutineInput>): Promise<Routine> {
+    return this.request('PATCH', `/api/v1/routines/${encodeURIComponent(id)}`, body);
+  }
+
+  deleteRoutine(id: string): Promise<unknown> {
+    return this.request('DELETE', `/api/v1/routines/${encodeURIComponent(id)}`);
+  }
+
+  runRoutine(id: string): Promise<Routine> {
+    return this.request('POST', `/api/v1/routines/${encodeURIComponent(id)}/run`);
   }
 }

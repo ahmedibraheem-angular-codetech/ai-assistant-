@@ -28,6 +28,7 @@ export const routes: Routes = [
   { matcher: chatMatcher, component: ChatPage, title: 'المحادثة' },
   { path: 'customize', component: CustomizePage, title: 'تخصيص الرئيسية' },
   { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
+  { path: 'routines', loadComponent: () => import('./routines/routines-page').then((m) => m.RoutinesPage), title: 'المهام المجدولة' },
   { path: 'settings', component: SettingsPage, title: 'الإعدادات' },
   { path: 'team', component: TeamPage, title: 'الفريق' },
   { path: 'team/:id', component: AgentPage, title: 'ملف الوكيل' },

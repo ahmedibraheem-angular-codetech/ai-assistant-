@@ -327,6 +327,8 @@ before schema 25 were not logged. Budget use is today's in-memory counter
 
 ## Mac app (phase 5, in progress)
 
+**Scheduled routines** (`/routines`, "المهام المجدولة"): list, enable/disable, run now, create or edit a routine (name, prompt, agent, time, days) with a "ملخص الصبح" preset; see "Scheduled routines" above for the backend.
+
 `desktop/` is an Angular + Tauri 2 app with a side menu, an analytics home
 page and the chat page. The home page reads `/api/v1/analytics/summary`:
 KPI rings, a map of the assistant with its agents and systems (click a node

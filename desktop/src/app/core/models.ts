@@ -368,3 +368,29 @@ export interface NewStandingApproval {
   path_prefix?: string;
   expires_in_days?: number;
 }
+
+export interface Routine {
+  id: string;
+  name: string;
+  prompt: string;
+  agent_id: string | null;
+  time_of_day: string;
+  days: number[];
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at: string | null;
+  last_status: 'ok' | 'error' | 'refused' | null;
+  last_error: string | null;
+  last_conversation_id: string | null;
+  next_run_at: string;
+}
+
+export interface RoutineInput {
+  name: string;
+  prompt: string;
+  agent_id: string | null;
+  time_of_day: string;
+  days: number[];
+  enabled?: boolean;
+}
