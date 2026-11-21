@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.routes import (
+    style,
     agents,
     approvals,
     analytics,
@@ -136,3 +137,4 @@ app.include_router(learning.router, prefix=settings.api_prefix, tags=["Learning"
 app.include_router(analytics.router, prefix=settings.api_prefix, tags=["Analytics"])
 app.include_router(insights.router, prefix=settings.api_prefix, tags=["Insights"])
 app.include_router(voice.router, prefix=settings.api_prefix, tags=["Voice"])
+app.include_router(style.router, prefix=settings.api_prefix, tags=["Style"])

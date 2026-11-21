@@ -32,6 +32,10 @@ def _fresh_controls():
     """Pause state and budget counters must not leak between tests."""
     from app.core.controls import reset_cache
 
+    from app import style
+
     reset_cache()
+    style.reset_cache()
     yield
     reset_cache()
+    style.reset_cache()

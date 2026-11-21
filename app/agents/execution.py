@@ -53,6 +53,9 @@ class AgentExecutionService:
         from app.learning.skills import skills_block
 
         prompt = compose_system_prompt(prompt, skills_block(agent.id, message))
+        from app.style import style_block
+
+        prompt = compose_system_prompt(prompt, style_block())
         context = AgentExecutionContext(
             agent_id=agent.id,
             agent_name=agent.name,

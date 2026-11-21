@@ -30,6 +30,7 @@ from app.conversations.titles import generate_conversation_title
 from app.core.config import get_settings
 from app.memories.action_service import MemoryActionService
 from app.memories.context import compose_system_prompt
+from app.style import style_block
 from app.memories.models import Memory
 from app.memories.service import MemoryService
 from app.routing.schemas import RoutingDecision
@@ -231,7 +232,9 @@ class ConversationService:
                         answer = await self.execution.complete(
                             model=model,
                             message=message,
-                            system_prompt=compose_system_prompt(prompt, memory_block),
+                            system_prompt=compose_system_prompt(
+                                compose_system_prompt(prompt, memory_block), style_block()
+                            ),
                             history=history,
                             agent_id=None,
                         )
