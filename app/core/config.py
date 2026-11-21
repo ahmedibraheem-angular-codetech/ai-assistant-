@@ -88,6 +88,11 @@ class Settings(BaseSettings):
     voice_max_audio_bytes: int = Field(default=8_000_000, ge=10_000, le=50_000_000)
     voice_max_tts_chars: int = Field(default=4_000, ge=100, le=20_000)
     voice_timeout_seconds: int = Field(default=120, ge=5, le=600)
+    # Browser (browser_read): headless installed Chrome, empty profile, public sites only.
+    browser_enabled: bool = True
+    browser_chrome_channel: str = "chrome"  # empty = Playwright's own Chromium (needs `playwright install`)
+    browser_timeout_seconds: int = Field(default=25, ge=5, le=120)
+    browser_max_chars: int = Field(default=12_000, ge=500, le=100_000)
     # Code sandbox (run_code). Off by default. Each run needs approval.
     sandbox_enabled: bool = False
     sandbox_docker_path: str = "docker"

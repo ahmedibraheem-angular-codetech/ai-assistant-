@@ -309,6 +309,27 @@ Ollama unreachable (2 s ping, cached 60 s). Each insight has a stable `id`,
 `link`. Each rule is isolated, so one failing rule never hides the others.
 No schema change. Logic: `app/insights.py`.
 
+### Browser (read a web page)
+
+`browser_read` opens one public page in headless Google Chrome (Playwright,
+`pip install playwright`; it uses the installed Chrome, no browser download)
+and returns the title, final address, visible text and up to 25 links, marked
+as untrusted data. The profile is fresh and empty each time: no cookies, no
+saved logins, no downloads, no service workers; images, media and fonts are
+not loaded. **Every call needs approval** (risk sensitive; a URL can carry data
+out, so no standing approval covers it), and no agent has the tool until you
+grant it (`PUT /api/v1/agents/{id}/tools`).
+
+Only public addresses are reachable. All of Chrome's traffic, including every
+redirect hop, frame and websocket, goes through a small filtering proxy inside
+the tool that resolves each host once, refuses loopback, private, link-local,
+carrier-NAT and other non-public addresses, and connects to the address it
+checked (no DNS rebinding). QUIC and non-proxied WebRTC are off. So a page
+cannot reach this API, n8n webhooks or devices on your network. One page at a
+time, `BROWSER_TIMEOUT_SECONDS` (25) and `BROWSER_MAX_CHARS` (12000) cap it;
+`BROWSER_ENABLED=false` turns it off. Clicking and filling forms are a later
+slice. Real-Chrome tests: `BROWSER_TESTS=1 pytest tests/test_browser.py`.
+
 ### n8n workflows
 
 The assistant can trigger n8n workflows you register, and every run asks for your approval first.

@@ -8,6 +8,7 @@ from app.tools.calculator import CalculatorTool
 from app.tools.datetime_tool import DateTimeTool
 from app.tools.registry import ToolRegistry
 from app.n8n import RunN8nWorkflowTool
+from app.browser import BrowserReadTool
 from app.tools.sandbox import RunCodeTool
 from app.projects.core import ProjectBriefTool, RecordProjectEntryTool
 from app.graph.core import GraphLookupTool, GraphRecordTool
@@ -25,6 +26,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         DelegateTaskTool(),
         RunCodeTool(),
         RunN8nWorkflowTool(),
+        BrowserReadTool(),
         ProjectBriefTool(),
         RecordProjectEntryTool(),
         GraphLookupTool(),
