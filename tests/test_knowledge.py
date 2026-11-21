@@ -496,7 +496,7 @@ def test_generation_constraints_reject_cross_document_pointers(client):  # noqa:
                 {"digest": _DIGEST},
             )
     assert "search_knowledge" not in ALLOWED_TOOLS
-    assert CURRENT_SCHEMA_VERSION == 26
+    assert CURRENT_SCHEMA_VERSION == 27
 
 
 def test_schema_14_migration_preserves_existing_rows(tmp_path, monkeypatch):

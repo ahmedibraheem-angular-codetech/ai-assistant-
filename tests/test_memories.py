@@ -320,7 +320,7 @@ def test_migration_from_schema_version_2_preserves_conversations(tmp_path, monke
             memory_count = connection.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
             pending_count = connection.execute("SELECT COUNT(*) FROM pending_memory_actions").fetchone()[0]
             grants_count = connection.execute("SELECT COUNT(*) FROM agent_tool_grants").fetchone()[0]
-        assert versions == [(2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,), (26,)]
+        assert versions == [(2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,), (26,), (27,)]
         assert agent_count == 1
         assert message_count == 1
         assert memory_count == 0

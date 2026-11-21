@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import get_settings
 
-CURRENT_SCHEMA_VERSION = 26
+CURRENT_SCHEMA_VERSION = 27
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -91,7 +91,7 @@ def init_database() -> None:
     from app.learning import lessons, skills, study
     from app.tools import models as tool_models
     from app.tools import runs as tool_runs
-    from app import routines
+    from app import n8n, routines
 
     _ = (
         agent_models.AgentRecord,
@@ -122,6 +122,7 @@ def init_database() -> None:
         study.AgentStudyRunRecord,
         tool_runs.ToolRunRecord,
         routines.RoutineRecord,
+        n8n.N8nWorkflowRecord,
         approval_models.ApprovalRequestRecord,
     )
     from app.approvals.payloads import McpExecutionPayloadRecord

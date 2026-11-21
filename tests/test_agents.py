@@ -272,7 +272,7 @@ def test_persistence_after_restart(database_file):
     with open_sqlite(database_file) as connection:
         versions = connection.execute("SELECT version FROM schema_version").fetchall()
         agent_count = connection.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-    assert versions == [(26,)]
+    assert versions == [(27,)]
     assert agent_count == 1
 
 

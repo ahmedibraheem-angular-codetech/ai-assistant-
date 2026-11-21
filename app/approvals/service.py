@@ -942,6 +942,7 @@ def to_public(record: ApprovalRequestRecord) -> dict:
         "description": record.description,
         "arguments": _public_arguments(record),
         "change": _change_preview(record),
+        "workflow": _workflow_detail(record),
         "risk": record.risk,
         "reason": record.reason,
         "mode": record.mode,
@@ -973,6 +974,19 @@ def _public_arguments(record: ApprovalRequestRecord) -> dict | None:
     if not isinstance(parsed, dict):
         return None
     return present_arguments(parsed)
+
+
+def _workflow_detail(record: ApprovalRequestRecord) -> dict | None:
+    """Registered n8n details for the approval card (display only)."""
+    if record.tool_name != "run_n8n_workflow":
+        return None
+    from app.n8n import describe_workflow
+
+    try:
+        arguments = json.loads(record.arguments_json)
+        return describe_workflow(arguments.get("workflow") if isinstance(arguments, dict) else None)
+    except Exception:  # noqa: BLE001 - display only
+        return None
 
 
 def _change_preview(record: ApprovalRequestRecord) -> dict | None:

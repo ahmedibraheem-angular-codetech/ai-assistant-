@@ -899,7 +899,7 @@ def test_schema_v5_adds_grants_without_dropping_agent_rows(tmp_path, monkeypatch
             columns = [row[1] for row in connection.execute("PRAGMA table_info(agents)")]
             grants = connection.execute("SELECT COUNT(*) FROM agent_tool_grants").fetchone()[0]
             agents = connection.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-        assert versions == [(4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,), (26,)]
+        assert versions == [(4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,), (26,), (27,)]
         assert agents == 1
         assert grants == 0
         assert "system_prompt" in columns

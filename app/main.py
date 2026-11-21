@@ -17,6 +17,7 @@ from app.api.routes import (
     memories,
     permissions,
     projects,
+    n8n,
     routines,
     tools,
     workspaces,
@@ -128,6 +129,7 @@ app.include_router(recoveries.router, prefix=settings.api_prefix, tags=["Recover
 app.include_router(control.router, prefix=settings.api_prefix, tags=["Control"])
 app.include_router(projects.router, prefix=settings.api_prefix, tags=["Projects"])
 app.include_router(graph.router, prefix=settings.api_prefix, tags=["Knowledge graph"])
+app.include_router(n8n.router, prefix=settings.api_prefix, tags=["n8n"])
 app.include_router(routines.router, prefix=settings.api_prefix, tags=["Routines"])
 app.include_router(learning.router, prefix=settings.api_prefix, tags=["Learning"])
 app.include_router(analytics.router, prefix=settings.api_prefix, tags=["Analytics"])

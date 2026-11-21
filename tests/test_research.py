@@ -268,7 +268,7 @@ def test_default_providers_add_brave_only_when_a_key_is_configured(monkeypatch):
 
 
 def test_schema_and_command_registry_stay_unchanged():
-    assert CURRENT_SCHEMA_VERSION == 26
+    assert CURRENT_SCHEMA_VERSION == 27
     assert command_ids() == frozenset({"show_directory", "measure_file", "preview_text"})
     assert get_tool_registry().get("shell") is None
     schema = get_tool_registry().get("research").input_schema

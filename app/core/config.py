@@ -103,6 +103,11 @@ class Settings(BaseSettings):
     routine_scheduler_enabled: bool = True
     routine_timezone: str = "Africa/Cairo"
     routine_catchup_hours: float = Field(default=6, ge=0, le=24)
+    # n8n workflows (phase 7): loopback only, every run needs approval.
+    n8n_base_url: str = "http://127.0.0.1:5678"
+    n8n_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    n8n_max_payload_bytes: int = Field(default=64_000, ge=100, le=256_000)
+    n8n_max_response_chars: int = Field(default=4_000, ge=100, le=100_000)
     # Read-only file tools. Sizes are bytes. Output is capped so one file cannot flood a turn.
     file_max_bytes: int = Field(default=1_048_576, ge=1_024, le=5_242_880)
     file_max_output_chars: int = Field(default=20_000, ge=500, le=100_000)

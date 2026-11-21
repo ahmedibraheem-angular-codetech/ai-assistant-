@@ -1,3 +1,5 @@
+import json
+
 from app.tools.exceptions import ToolValidationError
 
 
@@ -42,6 +44,17 @@ def _check(name: str, spec: dict, value: object) -> object:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ToolValidationError(f"Tool argument '{name}' must be a number.")
         _check_range(name, spec, value)
+    elif expected == "object":
+        if not isinstance(value, dict):
+            raise ToolValidationError(f"Tool argument '{name}' must be an object.")
+        ceiling = spec.get("maxJsonBytes")
+        if isinstance(ceiling, int):
+            try:
+                size = len(json.dumps(value, ensure_ascii=False).encode("utf-8"))
+            except (TypeError, ValueError):
+                raise ToolValidationError(f"Tool argument '{name}' must be JSON.") from None
+            if size > ceiling:
+                raise ToolValidationError(f"Tool argument '{name}' is too large.")
     elif expected == "boolean":
         if not isinstance(value, bool):
             raise ToolValidationError(f"Tool argument '{name}' must be a boolean.")
