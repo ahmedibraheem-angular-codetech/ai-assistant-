@@ -8,6 +8,7 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "check:freeze": "node scripts/check-frozen-prototype.mjs",
+    "check:csp": "node scripts/check-csp.mjs",
     "dist": "tauri build"
   },
   "private": true,
