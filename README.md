@@ -346,7 +346,16 @@ risk, reason, the sealed arguments (secret values hidden), a file-change
 preview and the server's integrity warnings. Approve takes two clicks
 because it runs the operation; requests that fail verification, cannot be
 reviewed, or are MCP operations (review only) offer reject only. The badge
-polls `/api/v1/approvals` every 15 seconds. Dark and light
+polls `/api/v1/approvals` every 15 seconds.
+
+The **settings page** (`/settings`, last in the side menu) has three
+sections. *Assistant state* pauses or resumes the assistant. *Daily limits*
+shows each agent's tool calls and chat turns today against its limits, lets
+you edit them (1 to 100000, empty means no limit) or remove them. *Standing
+approvals* lists the lasting "yes" grants, adds one (agent, read tool,
+optional path prefix and 1 to 365 days) and revokes it; only read tools can
+get one, the server refuses the rest and changes and commands always ask.
+Dark and light
 themes switch from the side menu; all colours are tokens in
 `desktop/src/styles.css`. Start the server, then:
 

@@ -1,0 +1,124 @@
+<header class="top">
+  <h1>الإعدادات</h1>
+  <p class="muted">إيقاف المساعد مؤقتاً، حدود الاستخدام اليومية، وموافقات القراءة الدائمة.</p>
+</header>
+
+<section class="card" aria-labelledby="s-control">
+  <h2 id="s-control">حالة المساعد</h2>
+  @if (errors().control) {
+    <p class="banner danger" role="alert" dir="auto">{{ errors().control }}</p>
+  }
+  @if (loading().control) {
+    <p class="muted" role="status">جارٍ التحميل…</p>
+  } @else if (paused() !== null) {
+    <div class="row">
+      <span class="badge" [class.tone-warn]="paused()" [class.tone-ok]="!paused()">{{ paused() ? 'متوقف مؤقتاً' : 'يعمل' }}</span>
+      <p class="muted grow small">{{ paused() ? 'لن ينفذ المساعد أي شيء حتى تستأنفه.' : 'يمكنك إيقافه مؤقتاً في أي وقت.' }}</p>
+      <button type="button" [class.primary]="paused()" [disabled]="busy() === 'control'" (click)="togglePause()">
+        {{ paused() ? 'استئناف' : 'إيقاف مؤقت' }}
+      </button>
+    </div>
+  }
+</section>
+
+<section class="card" aria-labelledby="s-budgets">
+  <h2 id="s-budgets">الحدود اليومية لكل وكيل</h2>
+  @if (errors().budgets) {
+    <p class="banner danger" role="alert" dir="auto">{{ errors().budgets }}</p>
+  }
+  @if (loading().budgets) {
+    <p class="muted" role="status">جارٍ التحميل…</p>
+  } @else {
+    @for (a of agents(); track a.id) {
+      @if (budgets()[a.id]; as b) {
+        <div class="agent">
+          <div class="row">
+            <strong class="grow" dir="auto">{{ a.name }}</strong>
+            <button type="button" (click)="edit(a.id)" [disabled]="!!busy()">تعديل الحدود</button>
+            @if (hasLimits(b)) {
+              <button type="button" class="danger-btn" (click)="removeLimits(a.id)" [disabled]="!!busy()">إزالة الحدود</button>
+            }
+          </div>
+          <div class="meters">
+            <div class="meter">
+              <span class="small muted">استدعاءات الأدوات اليوم</span>
+              <strong [class]="'tone-' + usageTone(b.tool_calls, b.daily_tool_calls)">{{ usageText(b.tool_calls, b.daily_tool_calls) }}</strong>
+              @if (usagePercent(b.tool_calls, b.daily_tool_calls) !== null) {
+                <div class="bar" [class]="'bar tone-' + usageTone(b.tool_calls, b.daily_tool_calls)"><i [style.width.%]="usagePercent(b.tool_calls, b.daily_tool_calls)"></i></div>
+              }
+            </div>
+            <div class="meter">
+              <span class="small muted">أدوار المحادثة اليوم</span>
+              <strong [class]="'tone-' + usageTone(b.chat_turns, b.daily_chat_turns)">{{ usageText(b.chat_turns, b.daily_chat_turns) }}</strong>
+              @if (usagePercent(b.chat_turns, b.daily_chat_turns) !== null) {
+                <div class="bar" [class]="'bar tone-' + usageTone(b.chat_turns, b.daily_chat_turns)"><i [style.width.%]="usagePercent(b.chat_turns, b.daily_chat_turns)"></i></div>
+              }
+            </div>
+          </div>
+          @if (editing() === a.id) {
+            <form class="form" (submit)="$event.preventDefault(); saveBudget()">
+              <label>حد استدعاءات الأدوات
+                <input type="text" inputmode="numeric" placeholder="بلا حد" [value]="toolsText()" (input)="toolsText.set(value($event))" />
+              </label>
+              <label>حد أدوار المحادثة
+                <input type="text" inputmode="numeric" placeholder="بلا حد" [value]="chatsText()" (input)="chatsText.set(value($event))" />
+              </label>
+              <p class="small muted full">من 1 إلى 100000. اترك الحقل فارغاً لعدم وضع حد.</p>
+              <div class="row full">
+                <button type="submit" class="primary" [disabled]="!!busy()">حفظ</button>
+                <button type="button" (click)="cancelEdit()">إلغاء</button>
+              </div>
+            </form>
+          }
+        </div>
+      }
+    } @empty {
+      <p class="empty">لا يوجد وكلاء بعد.</p>
+    }
+  }
+</section>
+
+<section class="card" aria-labelledby="s-standing">
+  <h2 id="s-standing">الموافقات الدائمة</h2>
+  <p class="small muted">نعم دائمة لأدوات القراءة فقط. أدوات التغيير والأوامر تسأل دائماً.</p>
+  @if (errors().standing) {
+    <p class="banner danger" role="alert" dir="auto">{{ errors().standing }}</p>
+  }
+  @if (loading().standing) {
+    <p class="muted" role="status">جارٍ التحميل…</p>
+  } @else {
+    @for (s of standing(); track s.id) {
+      <div class="row item" [class.off]="!s.active">
+        <div class="grow">
+          <strong class="mono" dir="ltr">{{ s.tool_name }}</strong>
+          <span class="small muted"> · {{ name(s.agent_id) }} · {{ standingScope(s) }} · {{ standingExpiry(s) }}</span>
+        </div>
+        <button type="button" class="danger-btn" (click)="revoke(s.id)" [disabled]="!!busy()">إلغاء</button>
+      </div>
+    } @empty {
+      <p class="empty">لا توجد موافقات دائمة. كل أداة تسأل في كل مرة.</p>
+    }
+    <form class="form" (submit)="$event.preventDefault(); addStanding()">
+      <label>الوكيل
+        <select [value]="saAgent()" (change)="saAgent.set(value($event))">
+          <option value="">اختر…</option>
+          @for (a of agents(); track a.id) {
+            <option [value]="a.id" [selected]="saAgent() === a.id">{{ a.name }}</option>
+          }
+        </select>
+      </label>
+      <label>أداة القراءة
+        <input type="text" dir="ltr" placeholder="read_file" [value]="saTool()" (input)="saTool.set(value($event))" />
+      </label>
+      <label>بادئة المسار (اختياري)
+        <input type="text" dir="ltr" placeholder="docs/" [value]="saPath()" (input)="saPath.set(value($event))" />
+      </label>
+      <label>المدة بالأيام (اختياري، 1 إلى 365)
+        <input type="text" inputmode="numeric" placeholder="بلا انتهاء" [value]="saDays()" (input)="saDays.set(value($event))" />
+      </label>
+      <div class="row full">
+        <button type="submit" class="primary" [disabled]="!!busy()">إضافة موافقة دائمة</button>
+      </div>
+    </form>
+  }
+</section>

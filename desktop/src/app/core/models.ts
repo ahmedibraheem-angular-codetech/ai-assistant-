@@ -331,3 +331,40 @@ export interface StudyDigest {
   skills_promoted: number;
   skills_rejected: number;
 }
+
+export interface ControlState {
+  paused: boolean;
+  [key: string]: unknown;
+}
+
+export interface AgentBudget {
+  agent_id: string;
+  day: string;
+  tool_calls: number;
+  chat_turns: number;
+  daily_tool_calls: number | null;
+  daily_chat_turns: number | null;
+}
+
+export interface BudgetLimits {
+  daily_tool_calls: number | null;
+  daily_chat_turns: number | null;
+}
+
+export interface StandingApproval {
+  id: string;
+  agent_id: string;
+  tool_name: string;
+  workspace_id: string | null;
+  path_prefix: string | null;
+  created_at: string;
+  expires_at: string | null;
+  active: boolean;
+}
+
+export interface NewStandingApproval {
+  agent_id: string;
+  tool_name: string;
+  path_prefix?: string;
+  expires_in_days?: number;
+}

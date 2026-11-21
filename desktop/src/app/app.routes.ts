@@ -6,6 +6,7 @@ import { CustomizePage } from './customize/customize-page';
 import { DashboardPage } from './dashboard/dashboard-page';
 import { KnowledgePage } from './knowledge/knowledge-page';
 import { ProjectsPage } from './projects/projects-page';
+import { SettingsPage } from './settings/settings-page';
 import { AgentPage } from './team/agent-page';
 import { TeamPage } from './team/team-page';
 
@@ -27,6 +28,7 @@ export const routes: Routes = [
   { matcher: chatMatcher, component: ChatPage, title: 'المحادثة' },
   { path: 'customize', component: CustomizePage, title: 'تخصيص الرئيسية' },
   { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
+  { path: 'settings', component: SettingsPage, title: 'الإعدادات' },
   { path: 'team', component: TeamPage, title: 'الفريق' },
   { path: 'team/:id', component: AgentPage, title: 'ملف الوكيل' },
   { path: 'projects', component: ProjectsPage, title: 'المشاريع' },

@@ -3,6 +3,11 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 
 import {
   Agent,
+  AgentBudget,
+  BudgetLimits,
+  ControlState,
+  NewStandingApproval,
+  StandingApproval,
   AgentProfile,
   AgentTemplate,
   AnalyticsRange,
@@ -236,6 +241,42 @@ export class AssistantApi {
 
   deleteRelation(id: string): Promise<unknown> {
     return this.request('DELETE', `/api/v1/graph/relations/${encodeURIComponent(id)}`);
+  }
+
+  control(): Promise<ControlState> {
+    return this.request('GET', '/api/v1/control');
+  }
+
+  pause(reason: string): Promise<ControlState> {
+    return this.request('POST', '/api/v1/control/pause', { reason });
+  }
+
+  resume(): Promise<ControlState> {
+    return this.request('POST', '/api/v1/control/resume');
+  }
+
+  budget(agentId: string): Promise<AgentBudget> {
+    return this.request('GET', `/api/v1/control/agents/${encodeURIComponent(agentId)}/budget`);
+  }
+
+  setBudget(agentId: string, limits: BudgetLimits): Promise<AgentBudget> {
+    return this.request('PUT', `/api/v1/control/agents/${encodeURIComponent(agentId)}/budget`, limits);
+  }
+
+  clearBudget(agentId: string): Promise<unknown> {
+    return this.request('DELETE', `/api/v1/control/agents/${encodeURIComponent(agentId)}/budget`);
+  }
+
+  standingApprovals(): Promise<{ standing_approvals: StandingApproval[]; count: number }> {
+    return this.request('GET', '/api/v1/permissions/standing-approvals');
+  }
+
+  addStandingApproval(body: NewStandingApproval): Promise<StandingApproval> {
+    return this.request('POST', '/api/v1/permissions/standing-approvals', body);
+  }
+
+  revokeStandingApproval(id: string): Promise<unknown> {
+    return this.request('DELETE', `/api/v1/permissions/standing-approvals/${encodeURIComponent(id)}`);
   }
 
   conversations(limit = 50): Promise<ConversationList> {
