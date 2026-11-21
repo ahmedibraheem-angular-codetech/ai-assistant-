@@ -277,6 +277,22 @@ standing approval for `research`, the session leaves an approval request
 instead. Pause and budgets apply. Turn the scheduler off with
 `STUDY_SCHEDULER_ENABLED=false`.
 
+### Writing style profile
+
+No fine-tuning: the user describes their style and pastes up to 10 samples
+(`GET/PUT /api/v1/style`, admin only, stored in the key/value controls table under
+`style_profile`, no schema change). When enabled, a block ("Writing style of the user ...",
+description plus `<style_sample>` tags, capped at 6000 characters) is appended to the system
+prompt of the default assistant and of agents. It is style guidance only and never changes rules,
+tools or permissions; routing prompts do not get it.
+
+Training data for a future LoRA run: `GET /api/v1/style/dataset` counts user -> assistant pairs
+from non-archived conversations (memory commands, empty messages and text that looks like a
+token are skipped); `POST /api/v1/style/dataset/export` writes
+`data/training/style-YYYYMMDD-HHMMSS.jsonl` (MLX chat format, file 600, folder 700). Once there
+are at least 300 pairs, the plan is `mlx_lm.lora --data <dir>` (the dir needs `train.jsonl` and
+`valid.jsonl` split from the export). No model is downloaded or trained yet.
+
 ### Scheduled routines
 
 A routine is a saved prompt that runs as a normal chat turn at a time of day
@@ -379,6 +395,8 @@ before schema 25 were not logged. Budget use is today's in-memory counter
 (it resets on restart).
 
 ## Mac app (phase 5, in progress)
+
+**My style** (`/style`, "أسلوبي", lazy-loaded): enable the writing style profile, edit the description and samples, try it with a test message, and see/export the training-data count (N / 300).
 
 **Scheduled routines** (`/routines`, "المهام المجدولة"): list, enable/disable, run now, create or edit a routine (name, prompt, agent, time, days) with a "ملخص الصبح" preset; see "Scheduled routines" above for the backend.
 

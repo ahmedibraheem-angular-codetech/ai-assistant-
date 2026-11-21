@@ -415,3 +415,21 @@ export interface RoutineInput {
   days: number[];
   enabled?: boolean;
 }
+
+export interface StyleProfile {
+  enabled: boolean;
+  description: string;
+  samples: string[];
+  updated_at: string | null;
+}
+
+export interface StyleDataset {
+  pairs: number;
+  min_needed: number;
+  ready: boolean;
+}
+
+export interface StyleExport {
+  path: string;
+  pairs: number;
+}

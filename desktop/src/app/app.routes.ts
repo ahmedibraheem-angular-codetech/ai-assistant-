@@ -29,6 +29,7 @@ export const routes: Routes = [
   { path: 'customize', component: CustomizePage, title: 'تخصيص الرئيسية' },
   { path: 'approvals', component: ApprovalsPage, title: 'الموافقات' },
   { path: 'routines', loadComponent: () => import('./routines/routines-page').then((m) => m.RoutinesPage), title: 'المهام المجدولة' },
+  { path: 'style', loadComponent: () => import('./style/style-page').then((m) => m.StylePage), title: 'أسلوبي' },
   { path: 'settings', component: SettingsPage, title: 'الإعدادات' },
   { path: 'team', component: TeamPage, title: 'الفريق' },
   { path: 'team/:id', component: AgentPage, title: 'ملف الوكيل' },

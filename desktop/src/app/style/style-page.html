@@ -1,0 +1,56 @@
+<div class="top">
+  <h1>أسلوبي</h1>
+  <p class="muted">صف أسلوبك في الكتابة وأضف أمثلة، وسيحاول المساعد أن يرد بنفس الأسلوب. هذا توجيه للأسلوب فقط ولا يغيّر الصلاحيات.</p>
+</div>
+
+@if (error()) { <p class="banner danger" role="alert">{{ error() }}</p> }
+@if (notice()) { <p class="banner ok" role="status">{{ notice() }}</p> }
+
+@if (loading()) {
+  <p class="muted">جارٍ التحميل…</p>
+} @else {
+  <section class="card">
+    <label class="switch">
+      <input type="checkbox" id="style-enabled" [checked]="enabled()" (change)="enabled.set($any($event.target).checked)" />
+      تفعيل أسلوبي في الردود
+    </label>
+    <label class="field">وصف الأسلوب
+      <textarea id="style-description" rows="3" maxlength="2000" placeholder="مثال: جمل قصيرة، عامية مصرية، بدون إيموجي"
+        [value]="description()" (input)="description.set($any($event.target).value)"></textarea>
+    </label>
+    <h2>أمثلة من كتابتي</h2>
+    @for (sample of samples(); track $index) {
+      <div class="sample">
+        <textarea rows="3" maxlength="2000" [attr.aria-label]="'مثال ' + ($index + 1)"
+          [value]="sample" (input)="setSample($index, $any($event.target).value)"></textarea>
+        <button type="button" class="danger-btn remove" (click)="removeSample($index)">حذف</button>
+      </div>
+    }
+    <div class="row">
+      <button type="button" class="add" [disabled]="samples().length >= maxSamples" (click)="addSample()">إضافة مثال</button>
+      <span class="muted small">{{ samples().length }} / {{ maxSamples }}</span>
+    </div>
+    <div class="row">
+      <button type="button" class="primary save" [disabled]="busy() !== ''" (click)="save()">حفظ</button>
+      <button type="button" class="test" [disabled]="busy() !== ''" (click)="test()">
+        {{ busy() === 'test' ? 'جارٍ التجربة…' : 'جرّب الأسلوب' }}
+      </button>
+    </div>
+    @if (testReply()) { <p class="reply" dir="auto">{{ testReply() }}</p> }
+  </section>
+
+  <section class="card">
+    <h2>بيانات التدريب</h2>
+    @if (dataset(); as d) {
+      <p>{{ d.pairs }} / {{ d.min_needed }} زوج (رسالة ورد)</p>
+      <div class="bar" role="progressbar" [attr.aria-valuenow]="percent()" aria-valuemin="0" aria-valuemax="100">
+        <div class="fill" [style.width.%]="percent()"></div>
+      </div>
+      @if (!d.ready) { <p class="muted small">أقل من {{ d.min_needed }} زوج قليل جدًا للتدريب، لكن يمكنك التصدير الآن.</p> }
+    }
+    <div class="row">
+      <button type="button" class="export" [disabled]="busy() !== ''" (click)="exportData()">تصدير</button>
+    </div>
+    @if (exportedPath()) { <p class="small path" dir="ltr">{{ exportedPath() }}</p> }
+  </section>
+}

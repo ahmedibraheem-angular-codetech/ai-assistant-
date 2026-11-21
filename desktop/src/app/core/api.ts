@@ -32,6 +32,9 @@ import {
   MessageList,
   Skill,
   StudyPlan,
+  StyleDataset,
+  StyleExport,
+  StyleProfile,
 } from './models';
 
 /**
@@ -318,6 +321,22 @@ export class AssistantApi {
 
   deleteN8nWorkflow(id: string): Promise<unknown> {
     return this.request('DELETE', `/api/v1/n8n/workflows/${encodeURIComponent(id)}`);
+  }
+
+  styleProfile(): Promise<StyleProfile> {
+    return this.request('GET', '/api/v1/style');
+  }
+
+  saveStyleProfile(profile: { enabled: boolean; description: string; samples: string[] }): Promise<StyleProfile> {
+    return this.request('PUT', '/api/v1/style', profile);
+  }
+
+  styleDataset(): Promise<StyleDataset> {
+    return this.request('GET', '/api/v1/style/dataset');
+  }
+
+  exportStyleDataset(): Promise<StyleExport> {
+    return this.request('POST', '/api/v1/style/dataset/export');
   }
 
   routines(): Promise<{ routines: Routine[] }> {
